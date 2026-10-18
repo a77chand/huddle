@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Huddle",
+    "slug": "huddle",
+    "scheme": "huddle",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.huddle.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+    "android": {
+      "package": "dev.huddle.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#1B1033",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["VIBRATE"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Huddle shares your location with your group only when you check in or ask for help."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Huddle records a short voice note only when you choose to send one with an alert.",
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#7C5CFF",
+          "defaultChannel": "alert",
+          "enableBackgroundRemoteNotifications": true
+        }
+      ]
+    ],
+    "extra": {
+      "serverUrl": "http://localhost:8787"
+    }
+  }
+}

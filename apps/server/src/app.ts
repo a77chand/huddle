@@ -100,7 +100,7 @@ export async function buildApp(opts: AppOptions) {
       now: t,
       durationHours: b.durationHours === undefined ? undefined : num(b.durationHours, 'durationHours'),
       timeZone: typeof b.timeZone === 'string' ? b.timeZone : undefined,
-      founder: { id: memberId, name: str(b.memberName, 'memberName', 40), policy: policy(b.policy) },
+      founder: { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), policy: policy(b.policy) },
     });
     store.insert(session);
     const token = store.issueToken({ sessionId: session.id, memberId });
@@ -113,7 +113,9 @@ export async function buildApp(opts: AppOptions) {
     const found = store.byJoinCode(str(b.joinCode, 'joinCode', 12));
     if (!found) throw new HttpError(404, 'no-session', 'no session with that code');
     const memberId = randomUUID();
-    const session = commit(core.join(found, { id: memberId, name: str(b.memberName, 'memberName', 40), policy: policy(b.policy) }, now()));
+    const session = commit(
+      core.join(found, { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), policy: policy(b.policy) }, now()),
+    );
     const token = store.issueToken({ sessionId: session.id, memberId });
     return { token, ...view(session, memberId) };
   });
@@ -250,6 +252,10 @@ function body(req: FastifyRequest): Record<string, unknown> {
 function str(v: unknown, name: string, max: number): string {
   if (typeof v !== 'string' || !v.trim()) throw new HttpError(400, 'bad-request', `${name} is required`);
   return v.trim().slice(0, max);
+}
+
+function optStr(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim().slice(0, 20) : undefined;
 }
 
 function num(v: unknown, name: string): number {

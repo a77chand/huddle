@@ -37,14 +37,7 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
 
     switch (e.kind) {
       case 'prompt':
-        push(
-          [m.id],
-          e.loud ? 'Check-in overdue' : 'Still okay?',
-          e.loud
-            ? `Tap to check in. Your group will be told in ${Math.ceil(m.policy.graceMin / 2)} min.`
-            : 'Tap to check in.',
-          'checkin',
-        );
+        // The phone schedules "Still okay?" locally so it works offline; pushing too would double it.
         break;
       case 'group-alert':
         if (e.reason === 'overdue')

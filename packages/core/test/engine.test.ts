@@ -185,6 +185,8 @@ test('bad input is rejected', () => {
   const s = concert();
   assert.throws(() => join(s, { id: 'd', name: 'D', policy: { ...policy, intervalMin: 1 } }, T0), /intervalMin/);
   assert.throws(() => join(s, { id: 'd', name: 'D', policy: { ...policy, contacts: [{ name: 'X', phone: '555' }] } }, T0), /E\.164/);
+  assert.throws(() => join(s, { id: 'd', name: 'D', phone: '12345' }, T0), /E\.164/);
+  assert.equal(join(s, { id: 'd', name: 'D', phone: '+447700900123' }, T0).session.members[3]!.phone, '+447700900123');
   assert.throws(() => acknowledge(s, 'ana', 'bea', T0), /not overdue/);
   assert.throws(() => acknowledge(tick(s, T0 + 31 * MIN).session, 'cy', 'cy', T0), /yourself/);
 });

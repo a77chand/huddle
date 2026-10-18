@@ -16,6 +16,7 @@ const MIN = 60_000;
 const STAGES: Stage[] = ['ok', 'due', 'nudged', 'overdue', 'escalated'];
 const LOW_BATTERY = 0.05;
 const BATTERY_RECOVERED = 0.2;
+const E164 = /^\+[1-9]\d{6,14}$/;
 
 export const DEFAULT_POLICY: CheckInPolicy = {
   intervalMin: 30,
@@ -43,7 +44,7 @@ export function validatePolicy(p: CheckInPolicy): CheckInPolicy {
   if (!Array.isArray(p.contacts) || p.contacts.length > 5)
     throw new HuddleError('bad-policy', 'at most 5 contacts');
   for (const c of p.contacts) {
-    if (!c || typeof c.name !== 'string' || !/^\+[1-9]\d{6,14}$/.test(c.phone ?? ''))
+    if (!c || typeof c.name !== 'string' || !E164.test(c.phone ?? ''))
       throw new HuddleError('bad-policy', 'contacts need a name and an E.164 phone like +14155550123');
   }
   return {
@@ -61,7 +62,7 @@ export function createSession(opts: {
   now: Millis;
   durationHours?: number;
   timeZone?: string;
-  founder: { id: string; name: string; policy?: CheckInPolicy };
+  founder: { id: string; name: string; phone?: string; policy?: CheckInPolicy };
 }): Result {
   const hours = opts.durationHours ?? 12;
   if (!(hours > 0 && hours <= 48)) throw new HuddleError('bad-duration', 'durationHours must be 0..48');
@@ -80,7 +81,7 @@ export function createSession(opts: {
 
 export function join(
   session: Session,
-  m: { id: string; name: string; policy?: CheckInPolicy },
+  m: { id: string; name: string; phone?: string; policy?: CheckInPolicy },
   now: Millis,
 ): Result {
   const s = open(session);
@@ -88,9 +89,11 @@ export function join(
   if (s.members.filter((x) => x.leftAt === null).length >= 20)
     throw new HuddleError('full', 'a session holds at most 20 people');
   const policy = validatePolicy(m.policy ?? DEFAULT_POLICY);
+  if (m.phone && !E164.test(m.phone)) throw new HuddleError('bad-phone', 'phone must be E.164, like +14155550123');
   s.members.push({
     id: m.id,
     name: m.name.slice(0, 40),
+    phone: m.phone || null,
     joinedAt: now,
     policy,
     lastCheckInAt: now,

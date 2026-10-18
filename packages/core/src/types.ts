@@ -64,6 +64,8 @@ export interface Responder {
 export interface Member {
   id: string;
   name: string;
+  /** E.164, so friends can tap to call. Optional. */
+  phone: string | null;
   joinedAt: Millis;
   policy: CheckInPolicy;
   lastCheckInAt: Millis;

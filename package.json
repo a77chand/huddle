@@ -12,5 +12,8 @@
   },
   "engines": {
     "node": ">=22.13"
+  },
+  "overrides": {
+    "react": "19.3.0"
   }
 }

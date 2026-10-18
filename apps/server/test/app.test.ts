@@ -60,7 +60,7 @@ test('concert: Cy goes quiet → prompt → group alert → Ana responds → Cy 
   await t.call('POST', '/v1/check-in', t.bea);
   t.runDue();
   await t.idle();
-  assert.deepEqual(t.pushes.map((p) => [p.tokens, p.msg.title]), [[['ExponentPushToken[C]'], 'Still okay?']]);
+  assert.equal(t.pushes.length, 0, 'prompts are local notifications on the phone');
 
   t.advance(10);
   t.pushes.length = 0;

@@ -10,6 +10,7 @@ export type Status = 'ok' | 'due' | 'overdue' | 'escalated' | 'sos' | 'left';
 export interface BoardRow {
   id: string;
   name: string;
+  phone: string | null;
   status: Status;
   lastCheckInAt: Millis;
   nextDueAt: Millis;
@@ -66,6 +67,7 @@ function row(m: Member, now: Millis): BoardRow {
   return {
     id: m.id,
     name: m.name,
+    phone: m.phone,
     status,
     lastCheckInAt: m.lastCheckInAt,
     nextDueAt: m.nextDueAt,
