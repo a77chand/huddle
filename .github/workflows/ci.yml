@@ -43,6 +43,6 @@ jobs:
       - run: docker build -t huddle-ai services/ai
       - name: Server container starts and answers
         run: |
-          docker run -d --name s -p 8787:8787 -e PUSH_DISABLED=1 huddle-server
+          docker run -d --name huddle-srv -p 8787:8787 -e PUSH_DISABLED=1 huddle-server
           for i in $(seq 1 30); do curl -sf localhost:8787/health && exit 0; sleep 1; done
-          docker logs s; exit 1
+          docker logs huddle-srv; exit 1
