@@ -77,6 +77,8 @@ export interface Member {
   card: AlertCard | null;
   responders: Responder[];
   lowBatteryAlerted: boolean;
+  /** Set when external contacts were texted, so they also get the all-clear. */
+  contactsAlertedAt: Millis | null;
   leftAt: Millis | null;
 }
 
@@ -129,7 +131,7 @@ export type Effect =
   | { kind: 'contacts-alert'; memberId: string; reason: AlertReason }
   | { kind: 'responder'; memberId: string; responderId: string }
   | { kind: 'card'; memberId: string }
-  | { kind: 'all-clear'; memberId: string; byId: string }
+  | { kind: 'all-clear'; memberId: string; byId: string; notifyContacts: boolean }
   | { kind: 'left'; memberId: string };
 
 export interface Result {

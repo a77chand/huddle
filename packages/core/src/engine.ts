@@ -103,6 +103,7 @@ export function join(
     card: null,
     responders: [],
     lowBatteryAlerted: false,
+    contactsAlertedAt: null,
     leftAt: null,
   });
   log(s, { at: now, kind: 'joined', memberId: m.id });
@@ -128,7 +129,7 @@ export function checkIn(
   if (wasAlerted && !m.sos) {
     m.responders = [];
     m.card = null;
-    effects.push({ kind: 'all-clear', memberId, byId: memberId });
+    effects.push(allClear(m, memberId));
   }
   if (extra.battery !== undefined) effects.push(...battery(s, m, extra.battery, now));
   return { session: s, effects };
@@ -164,8 +165,10 @@ export function sos(
   }
   m.sos = { at: now, status };
   const effects: Effect[] = [{ kind: 'group-alert', memberId, reason: 'sos' }];
-  if (m.policy.sosNotifiesContacts && m.policy.contacts.length > 0)
+  if (m.policy.sosNotifiesContacts && m.policy.contacts.length > 0) {
+    m.contactsAlertedAt = now;
     effects.push({ kind: 'contacts-alert', memberId, reason: 'sos' });
+  }
   return { session: s, effects };
 }
 
@@ -199,6 +202,7 @@ export function escalate(session: Session, byId: string, targetId: string, now: 
   if (!needsAttention(t)) throw new HuddleError('not-needed', `${t.name} is not overdue or asking for help`);
   if (t.policy.contacts.length === 0) throw new HuddleError('no-contacts', `${t.name} has no emergency contacts`);
   if (!t.sos) setStage(t, 'escalated', now);
+  t.contactsAlertedAt = now;
   log(s, { at: now, kind: 'escalated', memberId: targetId, byId, detail: 'manual' });
   return { session: s, effects: [{ kind: 'contacts-alert', memberId: targetId, reason: 'manual' }] };
 }
@@ -216,7 +220,7 @@ export function resolve(session: Session, byId: string, targetId: string, now: M
   t.nextDueAt = now + t.policy.intervalMin * MIN;
   setStage(t, 'ok', now);
   log(s, { at: now, kind: 'resolved', memberId: targetId, byId: byId === targetId ? undefined : byId });
-  return { session: s, effects: [{ kind: 'all-clear', memberId: targetId, byId }] };
+  return { session: s, effects: [allClear(t, byId)] };
 }
 
 export function reportBattery(session: Session, memberId: string, level: number, now: Millis, location?: GeoFix): Result {
@@ -270,7 +274,10 @@ export function tick(session: Session, now: Millis): Result {
       if (stage === 'due') effects.push({ kind: 'prompt', memberId: m.id, loud: false });
       if (stage === 'nudged') effects.push({ kind: 'prompt', memberId: m.id, loud: true });
       if (stage === 'overdue') effects.push({ kind: 'group-alert', memberId: m.id, reason: 'overdue' });
-      if (stage === 'escalated') effects.push({ kind: 'contacts-alert', memberId: m.id, reason: 'overdue' });
+      if (stage === 'escalated') {
+        m.contactsAlertedAt = now;
+        effects.push({ kind: 'contacts-alert', memberId: m.id, reason: 'overdue' });
+      }
       const kind: TimelineKind = stage === 'due' ? 'prompt' : stage === 'nudged' ? 'nudge' : stage === 'overdue' ? 'overdue' : 'escalated';
       log(s, { at: now, kind, memberId: m.id });
     }
@@ -310,6 +317,12 @@ export function nextWakeAt(session: Session): Millis | null {
 
 export function needsAttention(m: Member): boolean {
   return m.leftAt === null && (m.sos !== null || isGroupAlerted(m.stage) || m.lowBatteryAlerted);
+}
+
+function allClear(m: Member, byId: string): Effect {
+  const notifyContacts = m.contactsAlertedAt !== null;
+  m.contactsAlertedAt = null;
+  return { kind: 'all-clear', memberId: m.id, byId, notifyContacts };
 }
 
 function isGroupAlerted(stage: Stage) {

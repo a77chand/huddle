@@ -87,7 +87,7 @@ test('a host that slept through stages still alerts, without stale prompts', () 
 test('checking in after the group was told sends an all-clear', () => {
   let s = tick(concert(), T0 + 31 * MIN).session;
   const r = checkIn(s, 'cy', T0 + 32 * MIN);
-  assert.deepEqual(kinds(r.effects), ['all-clear:cy']);
+  assert.deepEqual(r.effects, [{ kind: 'all-clear', memberId: 'cy', byId: 'cy', notifyContacts: false }]);
   assert.equal(board(r.session, T0 + 32 * MIN).rows.find((x) => x.id === 'cy')!.status, 'ok');
 });
 
@@ -114,7 +114,7 @@ test('SOS alerts immediately, ignores the timer, and needs an explicit resolve',
   s = checkIn(s, 'bea', T0 + 6 * MIN).session;
   assert.equal(board(s, T0 + 6 * MIN).rows.find((x) => x.id === 'bea')!.status, 'sos', 'a check-in does not cancel SOS');
   const done = resolve(s, 'ana', 'bea', T0 + 10 * MIN);
-  assert.deepEqual(done.effects, [{ kind: 'all-clear', memberId: 'bea', byId: 'ana' }]);
+  assert.deepEqual(done.effects, [{ kind: 'all-clear', memberId: 'bea', byId: 'ana', notifyContacts: true }]);
   assert.equal(board(done.session, T0 + 10 * MIN).counts.needAttention, 0);
 });
 
