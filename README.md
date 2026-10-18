@@ -20,6 +20,7 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 | 2b · Contacts | Nobody responds within *M* minutes (optional) | Your emergency contacts get an SMS with the same known/unknown summary, and later an **all-clear** text. A responder pauses this; anyone can escalate by hand. |
 | 3 · SOS | **Hold for help**, or a discreet trigger | Immediate. Group (and contacts, if you chose) get your location and time, then any voice note or status you add. |
 | — · Battery | Phone at 5% | The group gets your last location *before* you go dark, the most common reason a friend "disappears". |
+| — · Nearby | Always, in the background | Phones note which friends' phones they pass near (Bluetooth). If Cy goes quiet, the alert says *"Last near Ana's phone 11:32 PM"*, even if Cy's phone is dead, because Ana's phone recorded it. |
 
 What a responder sees (excerpt of real output from the server and models in this repo):
 
@@ -52,6 +53,7 @@ Design decisions that matter for safety:
 - **Grounding.** Every extracted field must carry a quote that literally appears in the transcript, or it's dropped. A model can't invent a location or a request.
 - **Deterministic summaries.** Counts, times, "what we know / don't know" and next steps come from the engine, not a model.
 - **Privacy by default.** Location is shared only when you check in or ask for help, never tracked continuously. Leaving a session wipes your location, sessions end automatically (12 h by default), and ended sessions are deleted after 24 h. Only hashes of access tokens are stored. Self-host it and nothing leaves your server.
+- **Bluetooth IDs that only your group can read.** Each phone broadcasts a UUID derived from a members-only session secret, its member id and the current 15-minute window (SHA-256). Friends recognise each other, strangers see random IDs that rotate, and the server only ever learns "Ana was near Cy at 11:32", never the IDs. A sighting is *information*, not a check-in.
 - **Fallbacks.** No data connection? SOS opens a pre-filled text to your contacts and friends using the phone's own SMS. Check-ins retry until they land.
 
 ## The open-weight AI
@@ -96,7 +98,7 @@ cd apps/mobile
 EXPO_PUBLIC_SERVER_URL=http://<your-computer's-LAN-IP>:8787 npx expo start
 ```
 
-Local notifications, location and voice notes work in Expo Go. Remote push on Android needs a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`npx expo run:android` or `eas build --profile development`) and an EAS project id.
+Local notifications, location and voice notes work in Expo Go. Bluetooth "last seen near" is a native module ([`modules/huddle-proximity`](apps/mobile/modules/huddle-proximity)), so it needs a development build too. In Expo Go the app just shows it as unavailable. Remote push on Android needs a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`npx expo run:android` or `eas build --profile development`) and an EAS project id.
 
 **Everything with Docker:** `cp .env.example .env && docker compose up -d && docker compose exec ollama ollama pull gemma3:4b`
 
@@ -119,9 +121,21 @@ cd services/ai && .venv/bin/pytest -q      # grounding, fallback, API
 
 CI runs all of the above, bundles the app for iOS and Android, and builds and boots the Docker images.
 
+### Bluetooth: what works where
+
+Mobile OSes restrict background Bluetooth, so here's what to expect:
+
+| | iPhone scanning | Android scanning |
+|---|---|---|
+| iPhone advertiser, app open | ✅ | ✅ |
+| iPhone advertiser, in background | ✅ (reads the ID over a quick GATT connection) | ❌ iOS hides background adverts from Android |
+| Android advertiser | ✅ | ✅ |
+
+Scanning is slower while the app is in the background on both platforms. Android may stop it after a while without a foreground service. Sightings are batched and uploaded every minute, and kept until they're sent.
+
 ## Roadmap
 
-- **Bluetooth "last seen near"**: friends' phones note when they were last near each other, which works when the cell network is saturated at concerts.
+- Android foreground service for reliable all-night background scanning, plus distance hints from RSSI.
 - Native home-screen widget and watch complication for one-tap check-in.
 - On-device transcription (whisper.cpp) so voice notes never leave the phone.
 - Web link for SMS contacts to see the live incident without installing the app.

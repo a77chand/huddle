@@ -27,12 +27,17 @@ jobs:
         run: npx expo prebuild --platform android --no-install
       - name: Build debug APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        # Retry once: Maven Central occasionally returns 403 to CI runners.
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace || ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      # Expo SDK 58 needs Swift 6.2+ (Xcode 26).
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - uses: actions/setup-node@v4
         with:
           node-version: 24
