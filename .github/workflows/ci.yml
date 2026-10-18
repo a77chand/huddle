@@ -1,0 +1,48 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - name: Bundle the app for iOS and Android
+        working-directory: apps/mobile
+        run: npx expo export --platform ios --platform android --output-dir /tmp/export
+
+  ai:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: Rules-baseline eval
+        run: python -m evals.run_eval
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/server/Dockerfile -t huddle-server .
+      - run: docker build -t huddle-ai services/ai
+      - name: Server container starts and answers
+        run: |
+          docker run -d --name s -p 8787:8787 -e PUSH_DISABLED=1 huddle-server
+          for i in $(seq 1 30); do curl -sf localhost:8787/health && exit 0; sleep 1; done
+          docker logs s; exit 1

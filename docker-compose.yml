@@ -1,0 +1,30 @@
+# Self-host everything: docker compose up -d && docker compose exec ollama ollama pull gemma3:4b
+services:
+  server:
+    build: { context: ., dockerfile: apps/server/Dockerfile }
+    ports: ["8787:8787"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AI_URL: http://ai:8790
+    volumes: [huddle-data:/data]
+    restart: unless-stopped
+
+  ai:
+    build: services/ai
+    environment:
+      LLM_BASE_URL: http://ollama:11434/v1
+      LLM_MODEL: gemma3:4b
+    volumes: [whisper-cache:/root/.cache]
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes: [ollama:/root/.ollama]
+    restart: unless-stopped
+
+volumes:
+  huddle-data:
+  whisper-cache:
+  ollama:
