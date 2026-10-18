@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.db
+*.db-*
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+models/
+.DS_Store
+ios/
+android/
