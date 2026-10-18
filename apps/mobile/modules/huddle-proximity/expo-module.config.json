@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["HuddleProximityModule"]
+  },
+  "android": {
+    "modules": ["dev.huddle.proximity.HuddleProximityModule"]
+  }
+}

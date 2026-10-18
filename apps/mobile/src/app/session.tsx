@@ -8,6 +8,13 @@ import { ago, Button, Card, clock, H, P, Pill, STATUS_LABEL, statusColor, useThe
 
 const HOLD_MS = 1200;
 
+const PROXIMITY_HINT: Partial<Record<string, string>> = {
+  poweredOff: 'Bluetooth is off — friends can’t see when you’re nearby.',
+  unauthorized: 'Bluetooth permission is off — “last seen near” is paused.',
+  denied: 'Bluetooth permission is off — “last seen near” is paused.',
+  'not-built': '“Last seen near” needs a development build (not Expo Go).',
+};
+
 export default function Session() {
   const h = useHuddle();
   const t = useTheme();
@@ -88,6 +95,7 @@ export default function Session() {
             {h.connection === 'live' ? 'Live' : h.connection === 'polling' ? 'Reconnecting…' : 'Offline'} · {v.board.counts.accountedFor}/
             {v.board.counts.present} accounted for · ends {clock(v.board.endsAt)}
           </Text>
+          {PROXIMITY_HINT[h.proximity] && <Text style={{ color: t.muted, fontSize: 12 }}>{PROXIMITY_HINT[h.proximity]}</Text>}
         </View>
         <Pressable onPress={menu} hitSlop={12} accessibilityLabel="Huddle menu">
           <Text style={{ color: t.accent, fontSize: 28 }}>⋯</Text>
@@ -148,6 +156,7 @@ export default function Session() {
               <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }}>{r.name}</Text>
               <Text style={{ color: t.muted, fontSize: 13 }}>
                 Checked in {ago(r.lastCheckInAt, now)}
+                {r.lastNear && r.lastNear.memberId === v.me && now - r.lastNear.at < 10 * 60_000 ? ' · nearby' : ''}
                 {r.battery && r.battery.level < 0.2 ? ` · 🔋 ${Math.round(r.battery.level * 100)}%` : ''}
               </Text>
             </View>

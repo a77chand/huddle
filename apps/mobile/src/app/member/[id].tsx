@@ -77,6 +77,11 @@ export default function Member() {
           <P>Checked in {ago(row.lastCheckInAt)} ({clock(row.lastCheckInAt)}).</P>
           <P muted>Next check-in due {clock(row.nextDueAt)}.</P>
           {loc && <P muted>Location shared {ago(loc.at)}.</P>}
+          {row.lastNear && (
+            <P muted>
+              Last near {row.lastNear.memberId === v.me ? 'you' : row.lastNear.name} {ago(row.lastNear.at)} (Bluetooth).
+            </P>
+          )}
         </Card>
       )}
 

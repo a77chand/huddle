@@ -11,6 +11,6 @@ __pycache__/
 *.pyc
 models/
 .DS_Store
-ios/
-android/
+/apps/mobile/ios/
+/apps/mobile/android/
 *.egg-info/

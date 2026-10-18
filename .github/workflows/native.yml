@@ -1,0 +1,50 @@
+name: native
+# Compiles the app with its native modules (Bluetooth proximity) for both platforms.
+on:
+  push:
+    branches: [main]
+    paths: ["apps/mobile/**", "packages/core/**", "package-lock.json", ".github/workflows/native.yml"]
+  pull_request:
+    paths: ["apps/mobile/**", "packages/core/**", "package-lock.json"]
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Generate native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Generate native project and install pods
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios
+      - name: Build for the simulator
+        working-directory: apps/mobile/ios
+        run: |
+          xcodebuild -workspace Huddle.xcworkspace -scheme Huddle -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -50
+          exit ${PIPESTATUS[0]}

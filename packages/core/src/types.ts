@@ -81,6 +81,8 @@ export interface Member {
   lowBatteryAlerted: boolean;
   /** Set when external contacts were texted, so they also get the all-clear. */
   contactsAlertedAt: Millis | null;
+  /** Other member id -> last time their phones were near each other (Bluetooth). */
+  seenNear: Record<string, Millis>;
   leftAt: Millis | null;
 }
 
@@ -114,6 +116,11 @@ export interface Session {
   name: string;
   /** IANA zone used to print clock times in texts, e.g. "America/New_York". */
   timeZone: string;
+  /**
+   * Secret shared only with members. Phones derive rotating Bluetooth IDs from it,
+   * so strangers can't recognise or track anyone. Never sent to the server's logs.
+   */
+  proximityKey: string;
   createdAt: Millis;
   endsAt: Millis;
   endedAt: Millis | null;

@@ -8,6 +8,8 @@ export interface Profile {
   serverUrl: string;
   /** Kept on the phone too, so an offline SOS can still text them. */
   policy: CheckInPolicy;
+  /** Broadcast a rotating Bluetooth ID so friends' phones can note when we were near. */
+  shareProximity?: boolean;
 }
 
 export interface Membership {

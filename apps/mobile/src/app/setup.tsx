@@ -21,6 +21,7 @@ export default function Setup() {
   const [grace, setGrace] = useState(String(policy.graceMin));
   const [escalate, setEscalate] = useState(policy.escalateAfterMin === null ? '' : String(policy.escalateAfterMin));
   const [sosContacts, setSosContacts] = useState(policy.sosNotifiesContacts);
+  const [shareProximity, setShareProximity] = useState(p?.shareProximity !== false);
   const [contacts, setContacts] = useState<Contact[]>(policy.contacts.length ? policy.contacts : [{ name: '', phone: '' }]);
   const [busy, setBusy] = useState(false);
 
@@ -39,6 +40,7 @@ export default function Setup() {
       name: name.trim(),
       phone: phone.replace(/[\s()-]/g, ''),
       serverUrl: server.trim().replace(/\/$/, ''),
+      shareProximity,
       policy: {
         intervalMin: +interval,
         graceMin: +grace,
@@ -99,6 +101,18 @@ export default function Setup() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Text them immediately when I press SOS</Text>
           <Switch value={sosContacts} onValueChange={setSosContacts} />
+        </View>
+      </Card>
+
+      <Card>
+        <H size={18}>Bluetooth “last seen near”</H>
+        <P muted>
+          While you're in a huddle, your phone broadcasts an anonymous ID that changes every 15 minutes. Only your group can recognise it. If someone goes
+          quiet, friends can see whose phone was last near theirs, even with no signal. No location is sent.
+        </P>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Share Bluetooth proximity with my group</Text>
+          <Switch value={shareProximity} onValueChange={setShareProximity} />
         </View>
       </Card>
 

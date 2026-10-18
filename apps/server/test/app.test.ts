@@ -159,6 +159,24 @@ test('AI failure still records the preset status', async () => {
   assert.equal(row.card.presetStatus, 'Come find me');
 });
 
+test('proximity: members get the key; sightings show up in the overdue alert', async () => {
+  const t = await setup();
+  const ana = await t.call('GET', '/v1/session', t.ana);
+  assert.match(ana.json.proximityKey, /^[0-9a-f]{32}$/);
+  t.advance(25);
+  await t.call('POST', '/v1/check-in', t.ana);
+  await t.call('POST', '/v1/check-in', t.bea);
+  const r = await t.call('POST', '/v1/proximity', t.ana, { sightings: [{ memberId: t.cyId, at: T0 + 24 * MIN }] });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.board.rows.find((x: any) => x.name === 'Cy').lastNear.name, 'Ana');
+  t.advance(6);
+  t.runDue();
+  await t.idle();
+  const alert = t.pushes.find((p) => p.msg.title === 'Cy missed a check-in')!;
+  assert.match(alert.msg.body, /Last near Ana's phone 11:24 PM\./);
+  assert.equal((await t.call('POST', '/v1/proximity', t.ana, { sightings: 'x' })).status, 400);
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

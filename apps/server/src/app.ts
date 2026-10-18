@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import Fastify, { type FastifyRequest } from 'fastify';
 import websocket from '@fastify/websocket';
 import type { WebSocket } from 'ws';
@@ -44,6 +44,8 @@ export async function buildApp(opts: AppOptions) {
     return {
       me: memberId,
       joinCode: store.joinCode(session.id),
+      // Only members ever see this (every view is authenticated).
+      proximityKey: session.endedAt === null ? session.proximityKey : null,
       board: b,
       incidents: b.rows.filter((r) => r.needsAttention).map((r) => core.incident(session, r.id, t)!),
       timeline: session.timeline.slice(-50),
@@ -100,6 +102,7 @@ export async function buildApp(opts: AppOptions) {
       now: t,
       durationHours: b.durationHours === undefined ? undefined : num(b.durationHours, 'durationHours'),
       timeZone: typeof b.timeZone === 'string' ? b.timeZone : undefined,
+      proximityKey: randomBytes(16).toString('hex'),
       founder: { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), policy: policy(b.policy) },
     });
     store.insert(session);
@@ -169,6 +172,17 @@ export async function buildApp(opts: AppOptions) {
     const fresh = store.get(a.sessionId);
     if (!fresh) throw new HttpError(404, 'gone', 'this session no longer exists');
     return view(commit(core.attachCard(fresh, a.memberId, card, now())), a.memberId);
+  });
+
+  /** "My phone was near these friends' phones" — from Bluetooth, uploaded in batches. */
+  app.post('/v1/proximity', async (req) => {
+    const list = body(req).sightings;
+    if (!Array.isArray(list)) throw new HttpError(400, 'bad-request', 'sightings must be an array');
+    const sightings = list.slice(0, 100).map((x) => ({
+      memberId: str((x as Record<string, unknown>)?.memberId, 'memberId', 64),
+      at: num((x as Record<string, unknown>)?.at, 'at'),
+    }));
+    return mutate(req, (s, me, t) => core.reportSightings(s, me, sightings, t));
   });
 
   app.post('/v1/battery', async (req) => {

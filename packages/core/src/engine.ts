@@ -62,6 +62,8 @@ export function createSession(opts: {
   now: Millis;
   durationHours?: number;
   timeZone?: string;
+  /** 32 hex chars of randomness from the host (the engine stays deterministic). */
+  proximityKey: string;
   founder: { id: string; name: string; phone?: string; policy?: CheckInPolicy };
 }): Result {
   const hours = opts.durationHours ?? 12;
@@ -70,6 +72,7 @@ export function createSession(opts: {
     id: opts.id,
     name: opts.name.slice(0, 80),
     timeZone: validZone(opts.timeZone),
+    proximityKey: opts.proximityKey,
     createdAt: opts.now,
     endsAt: opts.now + hours * 60 * MIN,
     endedAt: null,
@@ -107,6 +110,7 @@ export function join(
     responders: [],
     lowBatteryAlerted: false,
     contactsAlertedAt: null,
+    seenNear: {},
     leftAt: null,
   });
   log(s, { at: now, kind: 'joined', memberId: m.id });
@@ -231,6 +235,41 @@ export function reportBattery(session: Session, memberId: string, level: number,
   const m = active(s, memberId);
   if (location) m.lastLocation = location;
   return { session: s, effects: battery(s, m, level, now) };
+}
+
+/**
+ * "My phone was near these friends' phones." Recorded on both sides: if Ana's
+ * phone saw Cy's, they were near each other. Information only — being near a
+ * friend is not a check-in.
+ */
+export function reportSightings(
+  session: Session,
+  observerId: string,
+  sightings: { memberId: string; at: Millis }[],
+  now: Millis,
+): Result {
+  const s = open(session);
+  const observer = active(s, observerId);
+  if (sightings.length > 100) throw new HuddleError('too-many', 'at most 100 sightings per report');
+  for (const { memberId, at } of sightings) {
+    const other = s.members.find((m) => m.id === memberId);
+    // Ignore unknown ids, self, people who left, and clocks that are far off.
+    if (!other || other.id === observerId || other.leftAt !== null) continue;
+    if (!(at <= now + MIN && at >= Math.max(now - 12 * 60 * MIN, other.joinedAt, observer.joinedAt))) continue;
+    observer.seenNear ??= {};
+    other.seenNear ??= {};
+    observer.seenNear[other.id] = Math.max(observer.seenNear[other.id] ?? 0, at);
+    other.seenNear[observer.id] = Math.max(other.seenNear[observer.id] ?? 0, at);
+  }
+  return { session: s, effects: [] };
+}
+
+/** The friend whose phone was most recently near this member's, if any. */
+export function lastNear(session: Session, memberId: string): { memberId: string; at: Millis } | null {
+  const m = session.members.find((x) => x.id === memberId);
+  let best: { memberId: string; at: Millis } | null = null;
+  for (const [id, at] of Object.entries(m?.seenNear ?? {})) if (!best || at > best.at) best = { memberId: id, at };
+  return best;
 }
 
 export function updatePolicy(session: Session, memberId: string, policy: CheckInPolicy, now: Millis): Result {

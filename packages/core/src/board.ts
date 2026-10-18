@@ -1,4 +1,4 @@
-import { needsAttention } from './engine.ts';
+import { lastNear, needsAttention } from './engine.ts';
 import type { AlertCard, GeoFix, Member, Millis, Responder, Session } from './types.ts';
 
 const MIN = 60_000;
@@ -18,6 +18,8 @@ export interface BoardRow {
   lateMin: number;
   lastLocation: GeoFix | null;
   locationStale: boolean;
+  /** Most recent friend whose phone was near this one (Bluetooth). */
+  lastNear: { memberId: string; name: string; at: Millis } | null;
   battery: { level: number; at: Millis } | null;
   lowBattery: boolean;
   responders: Responder[];
@@ -37,7 +39,7 @@ export interface Board {
 }
 
 export function board(session: Session, now: Millis): Board {
-  const rows = session.members.map((m) => row(m, now));
+  const rows = session.members.map((m) => row(session, m, now));
   const present = rows.filter((r) => r.status !== 'left');
   const attention = present.filter((r) => r.needsAttention);
   return {
@@ -56,7 +58,8 @@ export function board(session: Session, now: Millis): Board {
   };
 }
 
-function row(m: Member, now: Millis): BoardRow {
+function row(session: Session, m: Member, now: Millis): BoardRow {
+  const near = lastNear(session, m.id);
   const status: Status =
     m.leftAt !== null ? 'left'
     : m.sos ? 'sos'
@@ -74,6 +77,7 @@ function row(m: Member, now: Millis): BoardRow {
     lateMin: Math.max(0, Math.floor((now - m.nextDueAt) / MIN)),
     lastLocation: m.lastLocation,
     locationStale: m.lastLocation !== null && now - m.lastLocation.at > STALE_LOCATION_MIN * MIN,
+    lastNear: near && { ...near, name: session.members.find((x) => x.id === near.memberId)?.name ?? 'a friend' },
     battery: m.battery,
     lowBattery: m.lowBatteryAlerted,
     responders: m.responders,
@@ -106,7 +110,7 @@ export function incident(session: Session, memberId: string, now: Millis): Incid
     return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.floor(min / 60)} h ${min % 60} min ago`;
   };
   const nameOf = (id: string) => session.members.find((x) => x.id === id)?.name ?? 'someone';
-  const r = row(m, now);
+  const r = row(session, m, now);
 
   const headline =
     r.status === 'sos' ? `${m.name} asked for help`
@@ -122,6 +126,11 @@ export function incident(session: Session, memberId: string, now: Millis): Incid
       `Last shared location at ${clock(m.lastLocation.at)} (${ago(m.lastLocation.at)})` +
         (m.lastLocation.accuracyM ? `, accurate to about ${Math.round(m.lastLocation.accuracyM)} m` : '') +
         `: ${mapsLink(m.lastLocation)}`,
+    );
+  if (r.lastNear)
+    known.push(
+      `Last near ${r.lastNear.name}'s phone at ${clock(r.lastNear.at)} (${ago(r.lastNear.at)}, Bluetooth)` +
+        (r.lastNear.at > m.lastCheckInAt ? ' — after their last check-in.' : '.'),
     );
   if (m.battery) known.push(`Battery ${Math.round(m.battery.level * 100)}% at ${clock(m.battery.at)}.`);
   if (m.card) {
@@ -155,7 +164,8 @@ export function incident(session: Session, memberId: string, now: Millis): Incid
   if (m.card?.avoid) nextSteps.push(`Respect: do not ${m.card.avoid.value}.`);
   if (m.responders.length === 0) nextSteps.push(`Tap "I'm on it" so the group knows someone is handling this.`);
   if (m.lastLocation && !m.card?.avoid) nextSteps.push(`If you can't reach them, head to the last shared location.`);
-  if (!m.sos) nextSteps.push(`Ask whoever was last with ${m.name}.`);
+  if (!m.sos)
+    nextSteps.push(r.lastNear ? `Ask ${r.lastNear.name} — their phone was last near ${m.name}'s.` : `Ask whoever was last with ${m.name}.`);
   if (m.stage !== 'escalated' && m.policy.contacts.length > 0)
     nextSteps.push(`If you still can't reach them, tap "Text their contacts".`);
   nextSteps.push('If you believe there is immediate danger, call local emergency services.');

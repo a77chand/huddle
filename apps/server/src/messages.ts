@@ -1,4 +1,4 @@
-import { incident, incidentText, type Effect, type Millis, type Session } from '@huddle/core';
+import { incident, incidentText, lastNear, type Effect, type Millis, type Session } from '@huddle/core';
 
 export interface PushMessage {
   channel: 'push';
@@ -34,6 +34,8 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
         out.push({ channel: 'push', memberIds, title, body, urgency, data: { sessionId: session.id, memberId: m.id, kind: e.kind } });
     };
     const where = m.lastLocation ? ` Last location ${clock.format(m.lastLocation.at)}.` : '';
+    const near = lastNear(session, m.id);
+    const nearText = near && near.at > m.lastCheckInAt ? ` Last near ${name(near.memberId)}'s phone ${clock.format(near.at)}.` : '';
 
     switch (e.kind) {
       case 'prompt':
@@ -41,7 +43,7 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
         break;
       case 'group-alert':
         if (e.reason === 'overdue')
-          push(others(m.id), `${m.name} missed a check-in`, `Last check-in ${clock.format(m.lastCheckInAt)}.${where} Unreachable — not confirmed in danger. Try calling.`, 'alert');
+          push(others(m.id), `${m.name} missed a check-in`, `Last check-in ${clock.format(m.lastCheckInAt)}.${where}${nearText} Unreachable — not confirmed in danger. Try calling.`, 'alert');
         else if (e.reason === 'battery-low')
           push(others(m.id), `${m.name}'s phone is almost dead`, `Battery ${Math.round((m.battery?.level ?? 0) * 100)}%.${where} They may go quiet soon.`, 'alert');
         else

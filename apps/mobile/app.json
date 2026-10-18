@@ -11,7 +11,12 @@
       "supportsTablet": false,
       "bundleIdentifier": "dev.huddle.app",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification",
+          "bluetooth-central",
+          "bluetooth-peripheral"
+        ],
+        "NSBluetoothAlwaysUsageDescription": "Huddle uses Bluetooth to notice when friends in your group are nearby, using anonymous IDs that change every 15 minutes."
       }
     },
     "android": {
@@ -22,7 +27,9 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["VIBRATE"],
+      "permissions": [
+        "VIBRATE"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "plugins": [

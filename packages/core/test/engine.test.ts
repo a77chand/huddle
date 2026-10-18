@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
   acknowledge,
@@ -14,10 +15,15 @@ import {
   leave,
   nextWakeAt,
   reportBattery,
+  reportSightings,
   resolve,
   snooze,
   sos,
   tick,
+  digestToUuid,
+  expectedTokens,
+  proximityWindow,
+  tokenMessage,
   type CheckInPolicy,
   type Effect,
   type Session,
@@ -40,6 +46,7 @@ function concert(): Session {
     name: 'Concert',
     now: T0,
     timeZone: 'America/New_York',
+    proximityKey: '00112233445566778899aabbccddeeff',
     founder: { id: 'ana', name: 'Ana', policy },
   }).session;
   s = join(s, { id: 'bea', name: 'Bea', policy }, T0).session;
@@ -189,4 +196,40 @@ test('bad input is rejected', () => {
   assert.equal(join(s, { id: 'd', name: 'D', phone: '+447700900123' }, T0).session.members[3]!.phone, '+447700900123');
   assert.throws(() => acknowledge(s, 'ana', 'bea', T0), /not overdue/);
   assert.throws(() => acknowledge(tick(s, T0 + 31 * MIN).session, 'cy', 'cy', T0), /yourself/);
+});
+
+test('Bluetooth sightings: recorded both ways, never a check-in, shown to responders', () => {
+  let s = checkIn(concert(), 'cy', T0 + 20 * MIN).session;
+  s = reportSightings(s, 'ana', [
+    { memberId: 'cy', at: T0 + 32 * MIN },
+    { memberId: 'cy', at: T0 + 25 * MIN }, // older, ignored
+    { memberId: 'ana', at: T0 + 32 * MIN }, // self, ignored
+    { memberId: 'nobody', at: T0 + 32 * MIN }, // unknown, ignored
+    { memberId: 'bea', at: T0 + 99 * MIN }, // future, ignored
+  ], T0 + 33 * MIN).session;
+  assert.deepEqual(s.members[2]!.seenNear, { ana: T0 + 32 * MIN });
+  assert.deepEqual(s.members[0]!.seenNear, { cy: T0 + 32 * MIN });
+  assert.equal(s.members[2]!.lastCheckInAt, T0 + 20 * MIN, 'being near a friend is not a check-in');
+
+  s = tick(s, T0 + 55 * MIN).session;
+  const b = board(s, T0 + 55 * MIN).rows.find((r) => r.id === 'cy')!;
+  assert.deepEqual(b.lastNear, { memberId: 'ana', name: 'Ana', at: T0 + 32 * MIN });
+  const i = incident(s, 'cy', T0 + 55 * MIN)!;
+  assert.ok(i.known.includes("Last near Ana's phone at 11:32 PM (23 min ago, Bluetooth) — after their last check-in."));
+  assert.ok(i.nextSteps.includes("Ask Ana — their phone was last near Cy's."));
+});
+
+test('rotating Bluetooth IDs: stable within a window, different across windows and members', async () => {
+  const sha = async (x: string) => createHash('sha256').update(x).digest('hex');
+  const key = '00112233445566778899aabbccddeeff';
+  const t = T0 + 7 * MIN;
+  const mine = digestToUuid(await sha(tokenMessage(key, 'cy', proximityWindow(t))));
+  assert.match(mine, /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/);
+  const table = await expectedTokens(key, ['ana', 'bea', 'cy'], t, sha);
+  assert.equal(table.get(mine), 'cy');
+  assert.equal(table.size, 9);
+  const later = digestToUuid(await sha(tokenMessage(key, 'cy', proximityWindow(t) + 5)));
+  assert.equal(table.get(later), undefined, 'old IDs stop matching');
+  const other = await expectedTokens('ffeeddccbbaa99887766554433221100', ['cy'], t, sha);
+  assert.ok(![...other.keys()].includes(mine), 'another session cannot recognise Cy');
 });
