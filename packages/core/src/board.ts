@@ -18,6 +18,8 @@ export interface BoardRow {
   lateMin: number;
   lastLocation: GeoFix | null;
   locationStale: boolean;
+  /** Sharing location continuously (opt-in), not just at check-ins. */
+  liveLocation: boolean;
   /** Most recent friend whose phone was near this one (Bluetooth). */
   lastNear: { memberId: string; name: string; at: Millis } | null;
   battery: { level: number; at: Millis } | null;
@@ -77,6 +79,7 @@ function row(session: Session, m: Member, now: Millis): BoardRow {
     lateMin: Math.max(0, Math.floor((now - m.nextDueAt) / MIN)),
     lastLocation: m.lastLocation,
     locationStale: m.lastLocation !== null && now - m.lastLocation.at > STALE_LOCATION_MIN * MIN,
+    liveLocation: m.liveLocationSince !== null,
     lastNear: near && { ...near, name: session.members.find((x) => x.id === near.memberId)?.name ?? 'a friend' },
     battery: m.battery,
     lowBattery: m.lowBatteryAlerted,
@@ -125,6 +128,7 @@ export function incident(session: Session, memberId: string, now: Millis): Incid
     known.push(
       `Last shared location at ${clock(m.lastLocation.at)} (${ago(m.lastLocation.at)})` +
         (m.lastLocation.accuracyM ? `, accurate to about ${Math.round(m.lastLocation.accuracyM)} m` : '') +
+        (m.liveLocationSince !== null ? ', live sharing on' : '') +
         `: ${mapsLink(m.lastLocation)}`,
     );
   if (r.lastNear)

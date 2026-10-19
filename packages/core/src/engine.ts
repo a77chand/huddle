@@ -111,6 +111,7 @@ export function join(
     lowBatteryAlerted: false,
     contactsAlertedAt: null,
     seenNear: {},
+    liveLocationSince: null,
     leftAt: null,
   });
   log(s, { at: now, kind: 'joined', memberId: m.id });
@@ -264,6 +265,23 @@ export function reportSightings(
   return { session: s, effects: [] };
 }
 
+/**
+ * Opt-in live location: a background update, or turning sharing on/off.
+ * Updates the shared position only — it is not a check-in.
+ */
+export function shareLocation(
+  session: Session,
+  memberId: string,
+  update: { live: boolean; location?: GeoFix },
+  now: Millis,
+): Result {
+  const s = open(session);
+  const m = active(s, memberId);
+  if (update.location && (!m.lastLocation || update.location.at >= m.lastLocation.at)) m.lastLocation = update.location;
+  m.liveLocationSince = update.live ? (m.liveLocationSince ?? now) : null;
+  return { session: s, effects: [] };
+}
+
 /** The friend whose phone was most recently near this member's, if any. */
 export function lastNear(session: Session, memberId: string): { memberId: string; at: Millis } | null {
   const m = session.members.find((x) => x.id === memberId);
@@ -285,6 +303,7 @@ export function leave(session: Session, memberId: string, now: Millis): Result {
   const m = active(s, memberId);
   m.leftAt = now;
   m.lastLocation = null;
+  m.liveLocationSince = null;
   log(s, { at: now, kind: 'left', memberId });
   return { session: s, effects: [{ kind: 'left', memberId }] };
 }

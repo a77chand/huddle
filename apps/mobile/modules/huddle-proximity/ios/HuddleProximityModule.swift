@@ -9,8 +9,8 @@ public class HuddleProximityModule: Module {
 
     Events("onSighting", "onState")
 
-    /// Advertise `token` under `service` and scan for other phones advertising `service`.
-    AsyncFunction("start") { (service: String, token: String) in
+    /// Advertise `token` under `service`; scan for `scanMs` out of every `periodMs`.
+    AsyncFunction("start") { (service: String, token: String, scanMs: Double, periodMs: Double) in
       guard let s = UUID(uuidString: service), let t = UUID(uuidString: token) else {
         throw InvalidUuidException()
       }
@@ -19,7 +19,7 @@ public class HuddleProximityModule: Module {
           self?.sendEvent(name, body)
         }
       }
-      self.engine?.start(service: CBUUID(nsuuid: s), token: CBUUID(nsuuid: t))
+      self.engine?.start(service: CBUUID(nsuuid: s), token: CBUUID(nsuuid: t), scanMs: scanMs, periodMs: periodMs)
     }
 
     /// Rotate to a new ID without stopping the scan.
@@ -51,6 +51,9 @@ final class InvalidUuidException: Exception {
 /// A foreground iPhone advertises [service, token]. A backgrounded one can only be
 /// found by service UUID (iOS moves extra UUIDs to a hashed overflow area), so a
 /// GATT characteristic also serves the token and scanners read it on demand.
+///
+/// Battery: scanning runs in short bursts (default 10 s every 2 min) without
+/// duplicate reports; iOS chooses the advertising interval itself.
 final class ProximityEngine: NSObject, CBCentralManagerDelegate, CBPeripheralManagerDelegate, CBPeripheralDelegate {
   static let tokenCharacteristic = CBUUID(string: "7A6E0002-4875-6464-6C65-50524F580001")
   /// Re-read a phone's token over GATT at most this often.
@@ -69,6 +72,9 @@ final class ProximityEngine: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   private var connectingRssi: [UUID: Int] = [:]
   private var lastRead: [UUID: Date] = [:]
   private var lastEmit: [String: Date] = [:]
+  private var scanSeconds: TimeInterval = 10
+  private var periodSeconds: TimeInterval = 120
+  private var burstTimer: DispatchSourceTimer?
 
   init(emit: @escaping (String, [String: Any]) -> Void) {
     self.emit = emit
@@ -85,10 +91,12 @@ final class ProximityEngine: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     }
   }
 
-  func start(service: CBUUID, token: CBUUID) {
+  func start(service: CBUUID, token: CBUUID, scanMs: Double, periodMs: Double) {
     queue.async {
       self.service = service
       self.token = token
+      self.scanSeconds = min(max(scanMs / 1000, 2), 60)
+      self.periodSeconds = min(max(periodMs / 1000, self.scanSeconds), 900)
       self.running = true
       if self.central == nil {
         self.central = CBCentralManager(delegate: self, queue: self.queue)
@@ -113,6 +121,8 @@ final class ProximityEngine: NSObject, CBCentralManagerDelegate, CBPeripheralMan
   func stop() {
     queue.async {
       self.running = false
+      self.burstTimer?.cancel()
+      self.burstTimer = nil
       self.central?.stopScan()
       self.peripheral?.stopAdvertising()
       self.peripheral?.removeAllServices()
@@ -128,9 +138,24 @@ final class ProximityEngine: NSObject, CBCentralManagerDelegate, CBPeripheralMan
     if central.state == .poweredOn { startScanning() }
   }
 
+  /// (Re)start the burst schedule: scan now for scanSeconds, repeat every periodSeconds.
   private func startScanning() {
+    guard running, central?.state == .poweredOn else { return }
+    burstTimer?.cancel()
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now(), repeating: periodSeconds)
+    timer.setEventHandler { [weak self] in self?.scanBurst() }
+    timer.resume()
+    burstTimer = timer
+  }
+
+  private func scanBurst() {
     guard running, let s = service, let c = central, c.state == .poweredOn else { return }
-    c.scanForPeripherals(withServices: [s], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+    c.scanForPeripherals(withServices: [s], options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+    queue.asyncAfter(deadline: .now() + scanSeconds) { [weak self] in
+      guard let self, self.running else { return }
+      self.central?.stopScan()
+    }
   }
 
   func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) {

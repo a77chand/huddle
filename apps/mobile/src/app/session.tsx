@@ -15,6 +15,12 @@ const PROXIMITY_HINT: Partial<Record<string, string>> = {
   'not-built': '“Last seen near” needs a development build (not Expo Go).',
 };
 
+const LIVE_HINT: Partial<Record<string, string>> = {
+  on: 'Sharing live location with your group.',
+  'foreground-only': 'Sharing live location while Huddle is open — allow “Always” for background.',
+  denied: 'Live location is on, but location permission is off.',
+};
+
 export default function Session() {
   const h = useHuddle();
   const t = useTheme();
@@ -95,7 +101,15 @@ export default function Session() {
             {h.connection === 'live' ? 'Live' : h.connection === 'polling' ? 'Reconnecting…' : 'Offline'} · {v.board.counts.accountedFor}/
             {v.board.counts.present} accounted for · ends {clock(v.board.endsAt)}
           </Text>
-          {PROXIMITY_HINT[h.proximity] && <Text style={{ color: t.muted, fontSize: 12 }}>{PROXIMITY_HINT[h.proximity]}</Text>}
+          {h.batterySaver ? (
+            <Text style={{ color: t.muted, fontSize: 12 }}>Battery saver: Bluetooth and live location paused. Check-ins and SOS still work.</Text>
+          ) : (
+            [PROXIMITY_HINT[h.proximity], LIVE_HINT[h.liveLocation]].filter(Boolean).map((x) => (
+              <Text key={x} style={{ color: t.muted, fontSize: 12 }}>
+                {x}
+              </Text>
+            ))
+          )}
         </View>
         <Pressable onPress={menu} hitSlop={12} accessibilityLabel="Huddle menu">
           <Text style={{ color: t.accent, fontSize: 28 }}>⋯</Text>
@@ -157,6 +171,7 @@ export default function Session() {
               <Text style={{ color: t.muted, fontSize: 13 }}>
                 Checked in {ago(r.lastCheckInAt, now)}
                 {r.lastNear && r.lastNear.memberId === v.me && now - r.lastNear.at < 10 * 60_000 ? ' · nearby' : ''}
+                {r.liveLocation ? ' · live location' : ''}
                 {r.battery && r.battery.level < 0.2 ? ` · 🔋 ${Math.round(r.battery.level * 100)}%` : ''}
               </Text>
             </View>

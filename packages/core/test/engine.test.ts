@@ -17,6 +17,7 @@ import {
   reportBattery,
   reportSightings,
   resolve,
+  shareLocation,
   snooze,
   sos,
   tick,
@@ -232,4 +233,20 @@ test('rotating Bluetooth IDs: stable within a window, different across windows a
   assert.equal(table.get(later), undefined, 'old IDs stop matching');
   const other = await expectedTokens('ffeeddccbbaa99887766554433221100', ['cy'], t, sha);
   assert.ok(![...other.keys()].includes(mine), 'another session cannot recognise Cy');
+});
+
+test('live location: updates position without checking in; off clears the flag; leaving wipes it', () => {
+  let s = shareLocation(concert(), 'cy', { live: true, location: { lat: 1, lng: 2, at: T0 + 5 * MIN } }, T0 + 5 * MIN).session;
+  s = shareLocation(s, 'cy', { live: true, location: { lat: 9, lng: 9, at: T0 + 1 * MIN } }, T0 + 6 * MIN).session; // older fix ignored
+  const row = () => board(s, T0 + 6 * MIN).rows.find((r) => r.id === 'cy')!;
+  assert.equal(row().liveLocation, true);
+  assert.deepEqual(row().lastLocation, { lat: 1, lng: 2, at: T0 + 5 * MIN });
+  assert.equal(row().lastCheckInAt, T0, 'not a check-in');
+  s = tick(s, T0 + 31 * MIN).session;
+  assert.ok(incident(s, 'cy', T0 + 31 * MIN)!.known.some((k) => k.includes('live sharing on')));
+  s = shareLocation(s, 'cy', { live: false }, T0 + 32 * MIN).session;
+  assert.equal(board(s, T0 + 32 * MIN).rows.find((r) => r.id === 'cy')!.liveLocation, false);
+  s = leave(shareLocation(s, 'cy', { live: true }, T0 + 33 * MIN).session, 'cy', T0 + 34 * MIN).session;
+  assert.equal(s.members[2]!.liveLocationSince, null);
+  assert.equal(s.members[2]!.lastLocation, null);
 });

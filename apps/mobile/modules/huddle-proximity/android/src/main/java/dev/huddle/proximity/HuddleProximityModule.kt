@@ -14,11 +14,11 @@ class HuddleProximityModule : Module() {
 
     Events("onSighting", "onState")
 
-    /** Advertise `token` under `service` and scan for other phones advertising `service`. */
-    AsyncFunction("start") { service: String, token: String ->
+    /** Advertise `token` under `service`; scan for `scanMs` out of every `periodMs`. */
+    AsyncFunction("start") { service: String, token: String, scanMs: Double, periodMs: Double ->
       val context = appContext.reactContext ?: throw Exceptions.ReactContextLost()
       val e = engine ?: ProximityEngine(context) { name, body -> sendEvent(name, body) }.also { engine = it }
-      e.start(parse(service), parse(token))
+      e.start(parse(service), parse(token), scanMs.toLong(), periodMs.toLong())
     }
 
     /** Rotate to a new ID without stopping the scan. */

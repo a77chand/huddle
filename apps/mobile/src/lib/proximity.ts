@@ -6,8 +6,11 @@ import Proximity, { type ProximityState } from '../../modules/huddle-proximity';
 import type { Client } from './api';
 
 const FLUSH_EVERY_MS = 60_000;
+/** Scan in bursts: 10 s every 2 min is plenty for "last seen near". */
+const SCAN_MS = 10_000;
+const SCAN_PERIOD_MS = 120_000;
 
-export type ProximityStatus = ProximityState | 'off' | 'not-built' | 'denied';
+export type ProximityStatus = ProximityState | 'off' | 'not-built' | 'denied' | 'paused-battery';
 
 const sha256Hex = (s: string) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, s);
 
@@ -59,7 +62,7 @@ export function useProximity(opts: {
       if (!(await androidPermissions())) return setStatus('denied');
       if (cancelled) return;
       table.current = await expectedTokens(proximityKey, members.split(','), Date.now(), sha256Hex);
-      await radio.start(HUDDLE_BLE_SERVICE, await tokenNow());
+      await radio.start(HUDDLE_BLE_SERVICE, await tokenNow(), SCAN_MS, SCAN_PERIOD_MS);
       setStatus(radio.state());
       timer = setTimeout(rotate, PROXIMITY_WINDOW_MS - (Date.now() % PROXIMITY_WINDOW_MS) + 1000);
     })().catch(() => setStatus('unknown'));

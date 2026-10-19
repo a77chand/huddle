@@ -10,6 +10,8 @@ export interface Profile {
   policy: CheckInPolicy;
   /** Broadcast a rotating Bluetooth ID so friends' phones can note when we were near. */
   shareProximity?: boolean;
+  /** Continuous low-power location sharing during a huddle. Off unless turned on. */
+  shareLiveLocation?: boolean;
 }
 
 export interface Membership {
@@ -29,9 +31,12 @@ export const DEFAULT_POLICY: CheckInPolicy = {
   sosNotifiesContacts: true,
 };
 
+/** Readable after the first unlock, so the background location task works while the phone is locked. */
+const OPTS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+
 async function read<T>(key: string): Promise<T | null> {
   try {
-    const raw = await SecureStore.getItemAsync(key);
+    const raw = await SecureStore.getItemAsync(key, OPTS);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -40,8 +45,8 @@ async function read<T>(key: string): Promise<T | null> {
 
 export const storage = {
   profile: () => read<Profile>('huddle.profile'),
-  saveProfile: (p: Profile) => SecureStore.setItemAsync('huddle.profile', JSON.stringify(p)),
+  saveProfile: (p: Profile) => SecureStore.setItemAsync('huddle.profile', JSON.stringify(p), OPTS),
   membership: () => read<Membership>('huddle.membership'),
-  saveMembership: (m: Membership) => SecureStore.setItemAsync('huddle.membership', JSON.stringify(m)),
-  clearMembership: () => SecureStore.deleteItemAsync('huddle.membership'),
+  saveMembership: (m: Membership) => SecureStore.setItemAsync('huddle.membership', JSON.stringify(m), OPTS),
+  clearMembership: () => SecureStore.deleteItemAsync('huddle.membership', OPTS),
 };

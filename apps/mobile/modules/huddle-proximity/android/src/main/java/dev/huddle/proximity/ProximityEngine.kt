@@ -35,6 +35,10 @@ import java.util.UUID
  * the rotating ID in the scan response (two 128-bit UUIDs don't fit in 31 bytes).
  * A GATT characteristic also serves the ID, for scanners that only see the
  * service UUID (e.g. a backgrounded iPhone advertiser).
+ *
+ * Battery: advertising uses the OS low-power interval (~1 s) and scanning runs in
+ * short bursts (default 10 s every 2 min) — "last seen near" only needs a
+ * sighting every few minutes, not continuous radio use.
  */
 @SuppressLint("MissingPermission") // checked in hasPermissions() before any Bluetooth call
 class ProximityEngine(
@@ -55,21 +59,28 @@ class ProximityEngine(
   private var running = false
   private var advertising = false
   private var scanning = false
+  private var scanMs = 10_000L
+  private var periodMs = 120_000L
+  private val burst = Runnable { scanBurst() }
+  private val endBurst = Runnable { stopScanning() }
   private var gattServer: BluetoothGattServer? = null
   private val lastRead = HashMap<String, Long>()
   private val lastEmit = HashMap<String, Long>()
   private val connecting = HashMap<String, BluetoothGatt>()
 
-  fun start(service: UUID, token: UUID) = main.post {
+  fun start(service: UUID, token: UUID, scanMs: Long, periodMs: Long) = main.post {
     this.service = service
     this.token = token
+    this.scanMs = scanMs.coerceIn(2_000L, 60_000L)
+    this.periodMs = periodMs.coerceIn(this.scanMs, 15 * 60_000L)
     running = true
     val state = stateName()
     emit("onState", mapOf("state" to state))
     if (state != "poweredOn") return@post
     startServer()
     restartAdvertising()
-    startScanning()
+    main.removeCallbacks(burst)
+    scanBurst()
   }
 
   fun setToken(token: UUID) = main.post {
@@ -79,6 +90,8 @@ class ProximityEngine(
 
   fun stop() = main.post {
     running = false
+    main.removeCallbacks(burst)
+    main.removeCallbacks(endBurst)
     if (hasPermissions()) {
       stopAdvertising()
       stopScanning()
@@ -123,7 +136,7 @@ class ProximityEngine(
     val t = token ?: return
     val advertiser = manager.adapter?.bluetoothLeAdvertiser ?: return
     val settings = AdvertiseSettings.Builder()
-      .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+      .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
       .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
       .setConnectable(true)
       .build()
@@ -194,12 +207,20 @@ class ProximityEngine(
     }
   }
 
+  private fun scanBurst() {
+    if (!running) return
+    startScanning()
+    main.postDelayed(endBurst, scanMs)
+    main.postDelayed(burst, periodMs)
+  }
+
   private fun startScanning() {
     if (scanning) return
     val s = service ?: return
     val scanner = manager.adapter?.bluetoothLeScanner ?: return
     val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(s)).build())
-    val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build()
+    // Short bursts at full duty cycle find nearby phones fastest per unit of energy.
+    val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
     scanner.startScan(filters, settings, scanCallback)
     scanning = true
   }

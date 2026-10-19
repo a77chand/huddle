@@ -52,7 +52,7 @@ Design decisions that matter for safety:
 - **AI is never on the alert path.** The SOS goes out first. The voice note is processed afterwards and only *adds* detail. If the model is down, a rules-based extractor takes over. If speech-to-text is down, the preset status still goes through.
 - **Grounding.** Every extracted field must carry a quote that literally appears in the transcript, or it's dropped. A model can't invent a location or a request.
 - **Deterministic summaries.** Counts, times, "what we know / don't know" and next steps come from the engine, not a model.
-- **Privacy by default.** Location is shared only when you check in or ask for help, never tracked continuously. Leaving a session wipes your location, sessions end automatically (12 h by default), and ended sessions are deleted after 24 h. Only hashes of access tokens are stored. Self-host it and nothing leaves your server.
+- **Privacy by default.** Location is shared only when you check in or ask for help. Continuous **live location** is an opt-in setting (off by default) for groups who want map-style sharing. Leaving a session wipes your location, sessions end automatically (12 h by default), and ended sessions are deleted after 24 h. Only hashes of access tokens are stored. Self-host it and nothing leaves your server.
 - **Bluetooth IDs that only your group can read.** Each phone broadcasts a UUID derived from a members-only session secret, its member id and the current 15-minute window (SHA-256). Friends recognise each other, strangers see random IDs that rotate, and the server only ever learns "Ana was near Cy at 11:32", never the IDs. A sighting is *information*, not a check-in.
 - **Fallbacks.** No data connection? SOS opens a pre-filled text to your contacts and friends using the phone's own SMS. Check-ins retry until they land.
 
@@ -121,6 +121,17 @@ cd services/ai && .venv/bin/pytest -q      # grounding, fallback, API
 
 CI runs all of the above, bundles the app for iOS and Android, and builds and boots the Docker images.
 
+### Battery
+
+A night out is long and people want their phones alive at 2 AM, so Huddle is built to be cheap to leave running:
+
+- **Bluetooth Low Energy in bursts.** It advertises at the OS low-power interval and scans for 10 s every 2 min. "Last seen near" only needs a sighting every few minutes.
+- **No continuous GPS by default.** Location is read once at a check-in or SOS.
+- **Live location (opt-in)** uses low-power Wi-Fi/cell positioning (~100 m), reports only after you've moved ~150 m (or at most every 5 min), and lets iOS pause it when you're still. That's far cheaper than navigation-style GPS.
+- **Battery saver.** In Low Power Mode or below 20%, Bluetooth and live location pause automatically. Check-ins, SOS and the 5% "last location" alert always keep working.
+
+These are design choices, not measurements yet: real-device battery numbers belong here after field testing.
+
 ### Bluetooth: what works where
 
 Mobile OSes restrict background Bluetooth, so here's what to expect:
@@ -131,11 +142,12 @@ Mobile OSes restrict background Bluetooth, so here's what to expect:
 | iPhone advertiser, in background | ✅ (reads the ID over a quick GATT connection) | ❌ iOS hides background adverts from Android |
 | Android advertiser | ✅ | ✅ |
 
-Scanning is slower while the app is in the background on both platforms. Android may stop it after a while without a foreground service. Sightings are batched and uploaded every minute, and kept until they're sent.
+Scanning is slower while the app is in the background on both platforms. On Android, turning on live location also runs a foreground service, which keeps Bluetooth scanning alive all night. Without it, Android may stop scanning after a while. Sightings are batched and uploaded every minute, and kept until they're sent.
 
 ## Roadmap
 
-- Android foreground service for reliable all-night background scanning, plus distance hints from RSSI.
+- Measure battery use on real phones over a full night, and tune the burst timings.
+- A Bluetooth-only foreground service on Android, so all-night scanning doesn't require live location. Distance hints from RSSI.
 - Native home-screen widget and watch complication for one-tap check-in.
 - On-device transcription (whisper.cpp) so voice notes never leave the phone.
 - Web link for SMS contacts to see the live incident without installing the app.

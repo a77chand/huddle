@@ -22,6 +22,7 @@ export default function Setup() {
   const [escalate, setEscalate] = useState(policy.escalateAfterMin === null ? '' : String(policy.escalateAfterMin));
   const [sosContacts, setSosContacts] = useState(policy.sosNotifiesContacts);
   const [shareProximity, setShareProximity] = useState(p?.shareProximity !== false);
+  const [shareLiveLocation, setShareLiveLocation] = useState(p?.shareLiveLocation === true);
   const [contacts, setContacts] = useState<Contact[]>(policy.contacts.length ? policy.contacts : [{ name: '', phone: '' }]);
   const [busy, setBusy] = useState(false);
 
@@ -41,6 +42,7 @@ export default function Setup() {
       phone: phone.replace(/[\s()-]/g, ''),
       serverUrl: server.trim().replace(/\/$/, ''),
       shareProximity,
+      shareLiveLocation,
       policy: {
         intervalMin: +interval,
         graceMin: +grace,
@@ -115,6 +117,23 @@ export default function Setup() {
           <Switch value={shareProximity} onValueChange={setShareProximity} />
         </View>
       </Card>
+
+      <Card>
+        <H size={18}>Live location</H>
+        <P muted>
+          Off by default: Huddle normally shares where you are only when you check in or ask for help. Turn this on to share your position continuously
+          during a huddle, like map location sharing. It uses low-power location and only updates after you move, and your phone will ask for
+          “Always” location access.
+        </P>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Share live location during huddles</Text>
+          <Switch value={shareLiveLocation} onValueChange={setShareLiveLocation} />
+        </View>
+      </Card>
+
+      <P muted style={{ paddingHorizontal: 4 }}>
+        To save battery, Bluetooth and live location pause in Low Power Mode or below 20%. Check-ins, SOS and the low-battery alert always keep working.
+      </P>
 
       <Card>
         <H size={18}>Server</H>

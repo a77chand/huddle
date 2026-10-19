@@ -56,6 +56,7 @@ export function client(serverUrl: string, token: string | null) {
     status: (status: string) => call<View>('POST', '/v1/status', { status }),
     voice: (data: Blob, type: string, presetStatus?: string) =>
       call<View>('POST', `/v1/voice${presetStatus ? `?preset_status=${encodeURIComponent(presetStatus)}` : ''}`, undefined, { data, type }),
+    location: (live: boolean, location?: GeoFix) => call<View>('POST', '/v1/location', { live, location }),
     proximity: (sightings: { memberId: string; at: number }[]) => call<View>('POST', '/v1/proximity', { sightings }),
     battery: (level: number, location?: GeoFix) => call<View>('POST', '/v1/battery', { level, location }),
     ack: (id: string) => call<View>('POST', `/v1/members/${id}/ack`),

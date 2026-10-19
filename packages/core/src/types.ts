@@ -83,6 +83,8 @@ export interface Member {
   contactsAlertedAt: Millis | null;
   /** Other member id -> last time their phones were near each other (Bluetooth). */
   seenNear: Record<string, Millis>;
+  /** Opted in to continuous (low-power) location sharing; since when. */
+  liveLocationSince: Millis | null;
   leftAt: Millis | null;
 }
 

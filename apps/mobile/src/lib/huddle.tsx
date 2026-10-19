@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import type { BoardRow, CheckInPolicy } from '@huddle/core';
 import { ApiError, client, OfflineError, type View } from './api';
 import { batteryLevel, cancelPrompts, currentFix, pushToken, requestNotificationPermission, schedulePrompts, setupNotifications } from './device';
+import { useLiveLocation, type LiveLocationStatus } from './liveLocation';
 import { useProximity, type ProximityStatus } from './proximity';
 import { storage, type Membership, type Profile } from './storage';
 
@@ -22,6 +23,9 @@ interface Huddle {
   /** A check-in that hasn't reached the server yet. */
   pendingCheckIn: boolean;
   proximity: ProximityStatus;
+  liveLocation: LiveLocationStatus;
+  /** Low Power Mode or under 20%: Bluetooth and live location pause; check-ins and SOS never do. */
+  batterySaver: boolean;
   saveProfile(p: Profile): Promise<void>;
   start(name: string, durationHours: number): Promise<void>;
   join(code: string): Promise<void>;
@@ -177,12 +181,22 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [pendingCheckIn, api, run]);
 
+  const batteryLevelNow = Battery.useBatteryLevel();
+  const lowPowerMode = Battery.useLowPowerMode();
+  const batterySaver = lowPowerMode || (batteryLevelNow >= 0 && batteryLevelNow < 0.2);
+
   const proximity = useProximity({
-    enabled: Boolean(membership) && profile?.shareProximity !== false,
+    enabled: Boolean(membership) && profile?.shareProximity !== false && !batterySaver,
     proximityKey: view?.proximityKey,
     me: view?.me,
     memberIds: view?.board.rows.filter((r) => r.status !== 'left').map((r) => r.id) ?? [],
     api,
+  });
+
+  const liveLocation = useLiveLocation({
+    enabled: Boolean(membership) && profile?.shareLiveLocation === true,
+    batterySaver,
+    api: membership ? api : null,
   });
 
   const enter = useCallback(async (r: View & { token: string }) => {
@@ -200,7 +214,9 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     me,
     connection,
     pendingCheckIn,
-    proximity,
+    proximity: batterySaver && membership && profile?.shareProximity !== false ? 'paused-battery' : proximity,
+    liveLocation,
+    batterySaver,
     async saveProfile(p) {
       await storage.saveProfile(p);
       setProfile(p);

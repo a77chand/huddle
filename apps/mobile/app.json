@@ -30,7 +30,11 @@
       "permissions": [
         "VIBRATE"
       ],
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -38,14 +42,19 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Huddle shares your location with your group only when you check in or ask for help."
+          "locationWhenInUsePermission": "Huddle shares your location with your group when you check in or ask for help.",
+          "locationAlwaysAndWhenInUsePermission": "If you turn on live location, Huddle shares your position with your group during a huddle, even when the app is closed.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [
         "expo-audio",
         {
           "microphonePermission": "Huddle records a short voice note only when you choose to send one with an alert.",
-          "enableBackgroundRecording": false
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
         }
       ],
       [

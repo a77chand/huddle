@@ -177,6 +177,17 @@ test('proximity: members get the key; sightings show up in the overdue alert', a
   assert.equal((await t.call('POST', '/v1/proximity', t.ana, { sightings: 'x' })).status, 400);
 });
 
+test('live location endpoint', async () => {
+  const t = await setup();
+  const on = await t.call('POST', '/v1/location', t.cy, { live: true, location: { lat: 40.75, lng: -73.99 } });
+  const cy = on.json.board.rows.find((r: any) => r.name === 'Cy');
+  assert.equal(cy.liveLocation, true);
+  assert.equal(cy.lastLocation.lat, 40.75);
+  const off = await t.call('POST', '/v1/location', t.cy, { live: false });
+  assert.equal(off.json.board.rows.find((r: any) => r.name === 'Cy').liveLocation, false);
+  assert.equal((await t.call('POST', '/v1/location', t.cy, { location: { lat: 1, lng: 1 } })).status, 400);
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

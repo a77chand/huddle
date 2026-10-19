@@ -174,6 +174,13 @@ export async function buildApp(opts: AppOptions) {
     return view(commit(core.attachCard(fresh, a.memberId, card, now())), a.memberId);
   });
 
+  /** Opt-in live location: background updates, or turning sharing off ({ live: false }). */
+  app.post('/v1/location', async (req) => {
+    const b = body(req);
+    if (typeof b.live !== 'boolean') throw new HttpError(400, 'bad-request', 'live must be true or false');
+    return mutate(req, (s, me, t) => core.shareLocation(s, me, { live: b.live as boolean, location: geo(b.location, t) }, t));
+  });
+
   /** "My phone was near these friends' phones" — from Bluetooth, uploaded in batches. */
   app.post('/v1/proximity', async (req) => {
     const list = body(req).sightings;
