@@ -15,5 +15,8 @@
   },
   "overrides": {
     "react": "19.3.0"
+  },
+  "allowScripts": {
+    "llama.rn@0.12.9": true
   }
 }

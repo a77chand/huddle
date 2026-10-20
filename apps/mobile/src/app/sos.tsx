@@ -1,9 +1,9 @@
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHuddle, type SosResult } from '../lib/huddle';
+import { micPermission, startRecording as startMic, stopRecording } from '../lib/recorder';
 import { Button, Card, H, P, useTheme } from '../ui/kit';
 
 const PRESETS = ['Call me', 'Come find me', "Don't call — text me", 'I feel unwell', "I'm leaving, don't come in", 'Someone is bothering me'];
@@ -24,11 +24,10 @@ export default function Sos() {
   const [countdown, setCountdown] = useState<number | null>(alreadyActive || params.trigger === 'now' ? null : DISCREET_DELAY_S);
   const [result, setResult] = useState<SosResult | null>(alreadyActive ? 'sent' : null);
   const [sentStatus, setSentStatus] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
   const fired = useRef(false);
-
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const rec = useAudioRecorderState(recorder);
 
   const fire = async () => {
     if (fired.current || alreadyActive) return;
@@ -51,31 +50,38 @@ export default function Sos() {
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // Stop automatically at the limit.
+  // Count up while recording and stop automatically at the limit.
   useEffect(() => {
-    if (rec.isRecording && rec.durationMillis >= MAX_NOTE_S * 1000) stopAndSend();
-  }, [rec.durationMillis]);
+    if (!recording) return;
+    const i = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(i);
+  }, [recording]);
+  useEffect(() => {
+    if (recording && seconds >= MAX_NOTE_S) stopAndSend();
+  }, [seconds]);
 
   const startRecording = async () => {
-    const perm = await AudioModule.requestRecordingPermissionsAsync();
-    if (!perm.granted) return Alert.alert('Microphone is off', 'You can still pick a status below.');
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record({ forDuration: MAX_NOTE_S });
+    if (!(await micPermission())) return Alert.alert('Microphone is off', 'You can still pick a status below.');
+    try {
+      startMic();
+      setSeconds(0);
+      setRecording(true);
+    } catch (e) {
+      Alert.alert('Could not record', e instanceof Error ? e.message : String(e));
+    }
   };
 
   const stopAndSend = async () => {
-    await recorder.stop();
-    await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
-    const uri = recorder.uri;
-    if (!uri) return;
-    setSending(true);
+    setRecording(false);
+    const note = await stopRecording().catch(() => null);
+    if (!note) return;
+    setSending(h.onDeviceReady ? 'Understanding your note on this phone…' : 'Sending…');
     try {
-      await h.sendVoice(uri, sentStatus ?? undefined);
+      await h.sendVoice(note.uri, sentStatus ?? undefined);
     } catch (e) {
       Alert.alert('Voice note not sent', `${e instanceof Error ? e.message : e}. Your alert already went out — try a status instead.`);
     } finally {
-      setSending(false);
+      setSending(null);
     }
   };
 
@@ -136,12 +142,12 @@ export default function Sos() {
             <H size={18}>Say what you need</H>
             <P muted>Up to {MAX_NOTE_S} seconds. It's transcribed and turned into clear instructions for your friends — only what you actually say.</P>
             <Pressable
-              onPress={rec.isRecording ? stopAndSend : startRecording}
-              disabled={sending}
-              style={{ backgroundColor: rec.isRecording ? t.danger : t.accent, borderRadius: 999, paddingVertical: 20, alignItems: 'center', opacity: sending ? 0.5 : 1 }}
+              onPress={recording ? stopAndSend : startRecording}
+              disabled={Boolean(sending)}
+              style={{ backgroundColor: recording ? t.danger : t.accent, borderRadius: 999, paddingVertical: 20, alignItems: 'center', opacity: sending ? 0.5 : 1 }}
             >
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
-                {sending ? 'Sending…' : rec.isRecording ? `Stop & send (${Math.floor(rec.durationMillis / 1000)} s)` : 'Record voice note'}
+                {sending ?? (recording ? `Stop & send (${seconds} s)` : 'Record voice note')}
               </Text>
             </Pressable>
             {card && (card.requestedAction || card.statedLocation || card.avoid) && (

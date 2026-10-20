@@ -7,6 +7,7 @@ import type { BoardRow, CheckInPolicy } from '@huddle/core';
 import { ApiError, client, OfflineError, type View } from './api';
 import { batteryLevel, cancelPrompts, currentFix, pushToken, requestNotificationPermission, schedulePrompts, setupNotifications } from './device';
 import { useLiveLocation, type LiveLocationStatus } from './liveLocation';
+import { allInstalled, EXTRACTOR_NAME, processVoiceNote } from './ondevice';
 import { useProximity, type ProximityStatus } from './proximity';
 import { storage, type Membership, type Profile } from './storage';
 
@@ -26,6 +27,11 @@ interface Huddle {
   liveLocation: LiveLocationStatus;
   /** Low Power Mode or under 20%: Bluetooth and live location pause; check-ins and SOS never do. */
   batterySaver: boolean;
+  /** On-device AI is switched on and its models are downloaded. */
+  onDeviceReady: boolean;
+  /** Recent on-device timings, for the benchmark screen. */
+  onDeviceTimings: { transcribeMs: number; extractMs: number; audioMs?: number }[];
+  refreshOnDevice(): void;
   saveProfile(p: Profile): Promise<void>;
   start(name: string, durationHours: number): Promise<void>;
   join(code: string): Promise<void>;
@@ -57,6 +63,9 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState<View | null>(null);
   const [connection, setConnection] = useState<Connection>('offline');
   const [pendingCheckIn, setPendingCheckIn] = useState(false);
+  const [modelsInstalled, setModelsInstalled] = useState(() => allInstalled());
+  const [onDeviceTimings, setOnDeviceTimings] = useState<{ transcribeMs: number; extractMs: number }[]>([]);
+  const onDeviceReady = profile?.onDeviceAI === true && modelsInstalled;
 
   const api = useMemo(() => client(profile?.serverUrl ?? '', membership?.token ?? null), [profile?.serverUrl, membership?.token]);
   const me = view?.board.rows.find((r) => r.id === view.me) ?? null;
@@ -217,6 +226,9 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     proximity: batterySaver && membership && profile?.shareProximity !== false ? 'paused-battery' : proximity,
     liveLocation,
     batterySaver,
+    onDeviceReady,
+    onDeviceTimings,
+    refreshOnDevice: () => setModelsInstalled(allInstalled()),
     async saveProfile(p) {
       await storage.saveProfile(p);
       setProfile(p);
@@ -282,8 +294,18 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
       await run(() => api.status(status));
     },
     async sendVoice(uri, presetStatus) {
+      if (onDeviceReady) {
+        try {
+          const r = await processVoiceNote(uri);
+          setOnDeviceTimings((t) => [...t.slice(-19), r.timings]);
+          await run(() => api.card({ transcript: r.transcript, fields: r.fields, extractor: EXTRACTOR_NAME, presetStatus }));
+          return;
+        } catch {
+          /* fall through to the server's AI */
+        }
+      }
       const blob = await (await fetch(uri)).blob();
-      await run(() => api.voice(blob, 'audio/mp4', presetStatus));
+      await run(() => api.voice(blob, 'audio/wav', presetStatus));
     },
     async snooze(minutes) {
       await run(() => api.snooze(minutes));

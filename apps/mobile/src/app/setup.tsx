@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, ScrollView, Switch, Text, View } from 'react-native';
 import type { Contact } from '@huddle/core';
 import { useHuddle } from '../lib/huddle';
+import { allInstalled, download, MODELS, removeModels } from '../lib/ondevice';
 import { DEFAULT_POLICY, DEFAULT_SERVER } from '../lib/storage';
 import { Button, Card, Field, H, P, useTheme } from '../ui/kit';
 
@@ -23,6 +24,23 @@ export default function Setup() {
   const [sosContacts, setSosContacts] = useState(policy.sosNotifiesContacts);
   const [shareProximity, setShareProximity] = useState(p?.shareProximity !== false);
   const [shareLiveLocation, setShareLiveLocation] = useState(p?.shareLiveLocation === true);
+  const [onDeviceAI, setOnDeviceAI] = useState(p?.onDeviceAI === true);
+  const [modelsReady, setModelsReady] = useState(() => allInstalled());
+  const [progress, setProgress] = useState<number | null>(null);
+  const modelMB = Math.round(MODELS.reduce((n, m) => n + m.bytes, 0) / 1e6);
+  const fetchModels = async () => {
+    setProgress(0);
+    try {
+      await download(setProgress);
+      setModelsReady(true);
+      setOnDeviceAI(true);
+    } catch (e) {
+      Alert.alert('Download failed', `${e instanceof Error ? e.message : e}. Try again on Wi-Fi.`);
+    } finally {
+      setProgress(null);
+      h.refreshOnDevice();
+    }
+  };
   const [contacts, setContacts] = useState<Contact[]>(policy.contacts.length ? policy.contacts : [{ name: '', phone: '' }]);
   const [busy, setBusy] = useState(false);
 
@@ -43,6 +61,7 @@ export default function Setup() {
       serverUrl: server.trim().replace(/\/$/, ''),
       shareProximity,
       shareLiveLocation,
+      onDeviceAI: onDeviceAI && modelsReady,
       policy: {
         intervalMin: +interval,
         graceMin: +grace,
@@ -129,6 +148,46 @@ export default function Setup() {
           <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Share live location during huddles</Text>
           <Switch value={shareLiveLocation} onValueChange={setShareLiveLocation} />
         </View>
+      </Card>
+
+      <Card>
+        <H size={18}>On-device AI</H>
+        <P muted>
+          Turn voice notes into instructions on this phone instead of the server: the recording never leaves your phone and it works with no signal.
+          Uses open-weight Whisper and Huddle's own fine-tuned 0.5B model (one-time {modelMB} MB download — use Wi-Fi).
+        </P>
+        {modelsReady ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Process voice notes on this phone</Text>
+              <Switch value={onDeviceAI} onValueChange={setOnDeviceAI} />
+            </View>
+            {h.onDeviceTimings.length > 0 && (
+              <P muted>
+                Last {h.onDeviceTimings.length} notes: transcribe ~
+                {Math.round(h.onDeviceTimings.reduce((n, x) => n + x.transcribeMs, 0) / h.onDeviceTimings.length)} ms, understand ~
+                {Math.round(h.onDeviceTimings.reduce((n, x) => n + x.extractMs, 0) / h.onDeviceTimings.length)} ms.
+              </P>
+            )}
+            <Button
+              kind="secondary"
+              title="Delete downloaded models"
+              onPress={async () => {
+                await removeModels();
+                setModelsReady(false);
+                setOnDeviceAI(false);
+                h.refreshOnDevice();
+              }}
+            />
+          </>
+        ) : (
+          <Button
+            title={progress === null ? `Download models (${modelMB} MB)` : `Downloading… ${Math.round(progress * 100)}%`}
+            onPress={fetchModels}
+            busy={false}
+            disabled={progress !== null}
+          />
+        )}
       </Card>
 
       <P muted style={{ paddingHorizontal: 4 }}>

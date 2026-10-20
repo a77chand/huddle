@@ -12,6 +12,8 @@ export interface Profile {
   shareProximity?: boolean;
   /** Continuous low-power location sharing during a huddle. Off unless turned on. */
   shareLiveLocation?: boolean;
+  /** Transcribe and structure voice notes on this phone (models downloaded). */
+  onDeviceAI?: boolean;
 }
 
 export interface Membership {

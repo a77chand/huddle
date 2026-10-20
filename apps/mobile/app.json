@@ -16,7 +16,8 @@
           "bluetooth-central",
           "bluetooth-peripheral"
         ],
-        "NSBluetoothAlwaysUsageDescription": "Huddle uses Bluetooth to notice when friends in your group are nearby, using anonymous IDs that change every 15 minutes."
+        "NSBluetoothAlwaysUsageDescription": "Huddle uses Bluetooth to notice when friends in your group are nearby, using anonymous IDs that change every 15 minutes.",
+        "NSMicrophoneUsageDescription": "Huddle records a short voice note only when you choose to send one with an alert."
       }
     },
     "android": {
@@ -28,7 +29,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
-        "VIBRATE"
+        "VIBRATE",
+        "RECORD_AUDIO"
       ],
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": [
@@ -50,19 +52,20 @@
         }
       ],
       [
-        "expo-audio",
-        {
-          "microphonePermission": "Huddle records a short voice note only when you choose to send one with an alert.",
-          "enableBackgroundRecording": false,
-          "enableBackgroundPlayback": false
-        }
-      ],
-      [
         "expo-notifications",
         {
           "color": "#7C5CFF",
           "defaultChannel": "alert",
           "enableBackgroundRemoteNotifications": true
+        }
+      ],
+      "expo-build-properties",
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": false,
+          "forceCxx20": true,
+          "enableOpenCLAndHexagon": true
         }
       ]
     ],

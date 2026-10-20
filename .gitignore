@@ -14,3 +14,5 @@ models/
 /apps/mobile/ios/
 /apps/mobile/android/
 *.egg-info/
+services/ai/finetune/data/
+services/ai/finetune/out/
