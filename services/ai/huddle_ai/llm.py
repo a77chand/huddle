@@ -65,9 +65,13 @@ EXAMPLE2_OUT = {f: {"said": False, "value": "", "quote": ""} for f in FIELDS}
 
 
 class LLM:
-    def __init__(self, base_url: str, model: str, api_key: str | None = None, timeout: float = 20.0, finetuned: bool = False):
+    def __init__(
+        self, base_url: str, model: str, api_key: str | None = None, timeout: float = 20.0, finetuned: bool = False, constrain: bool = True
+    ):
         self.model = model
         self.finetuned = finetuned
+        # Grammar-constrained JSON helps prompted models; a fine-tuned model already emits the schema.
+        self.constrain = constrain
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout,
@@ -84,6 +88,7 @@ class LLM:
             os.environ.get("LLM_MODEL", "gemma3:4b"),
             os.environ.get("LLM_API_KEY"),
             finetuned=os.environ.get("LLM_PROMPT") == "finetuned",
+            constrain=os.environ.get("LLM_CONSTRAIN", "1") != "0",
         )
 
     def extract(self, transcript: str) -> dict:
@@ -93,7 +98,11 @@ class LLM:
                 "model": self.model,
                 "temperature": 0,
                 "messages": self.messages(transcript),
-                "response_format": {"type": "json_schema", "json_schema": {"name": "card", "schema": SCHEMA, "strict": True}},
+                **(
+                    {"response_format": {"type": "json_schema", "json_schema": {"name": "card", "schema": SCHEMA, "strict": True}}}
+                    if self.constrain
+                    else {}
+                ),
             },
         )
         res.raise_for_status()

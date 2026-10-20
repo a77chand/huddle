@@ -1,7 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { initLlama, type LlamaContext } from 'llama.rn';
 import { initWhisper, type WhisperContext } from 'whisper.rn/index';
-import { CARD_FIELDS } from '@huddle/core/grounding';
 
 /**
  * On-device voice notes: Whisper (whisper.cpp) transcribes and Huddle's
@@ -34,7 +33,7 @@ export const MODELS: ModelSpec[] = [
     label: 'Alert-card model (Huddle fine-tune, 0.5B)',
     url: `https://github.com/a77chand/huddle/releases/download/extractor-v1/${EXTRACTOR_NAME}-q4_k_m.gguf`,
     file: `${EXTRACTOR_NAME}-q4_k_m.gguf`,
-    bytes: 397_808_192,
+    bytes: 397_808_096,
   },
 ];
 
@@ -43,20 +42,6 @@ const SYSTEM =
   'Fields: stated_location, requested_action, avoid, condition, contact_preference. ' +
   'quote must be copied word-for-word from the note. Unsaid fields: said=false. Reply with JSON only.';
 
-const SCHEMA = {
-  type: 'object',
-  properties: Object.fromEntries(
-    CARD_FIELDS.map((f) => [
-      f,
-      {
-        type: 'object',
-        properties: { said: { type: 'boolean' }, value: { type: 'string' }, quote: { type: 'string' } },
-        required: ['said', 'value', 'quote'],
-      },
-    ]),
-  ),
-  required: [...CARD_FIELDS],
-};
 
 const dir = () => new Directory(Paths.document, 'models');
 const fileFor = (m: ModelSpec) => new File(dir(), m.file);
@@ -144,7 +129,8 @@ export async function processVoiceNote(wavUri: string): Promise<OnDeviceResult> 
     ],
     n_predict: 320,
     temperature: 0,
-    response_format: { type: 'json_schema', json_schema: { strict: true, schema: SCHEMA } },
+    // No grammar constraint: the fine-tune already emits the schema, and forcing tokens cost
+    // ~5 points of accuracy in evals. Unparsable or unquoted output is dropped by grounding.
     stop: ['<|im_end|>', '<|endoftext|>'],
   });
   const extractMs = Date.now() - t1;
