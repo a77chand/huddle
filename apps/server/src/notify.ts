@@ -5,19 +5,37 @@ export interface Sender {
   sms(to: string, body: string): Promise<void>;
 }
 
+export interface DeliveryResult {
+  message: Outbound;
+  recipients: number;
+  ok: boolean;
+  sentAt: number;
+}
+
 /** Deliver rendered messages. A failed channel is logged and never blocks the others. */
-export async function deliver(sender: Sender, pushTokens: Map<string, string>, out: Outbound[], log: (msg: string) => void) {
+export async function deliver(
+  sender: Sender,
+  pushTokens: Map<string, string>,
+  out: Outbound[],
+  log: (msg: string) => void,
+  onResult: (r: DeliveryResult) => void = () => {},
+) {
   await Promise.all(
     out.map(async (o) => {
+      let recipients = 0;
       try {
         if (o.channel === 'push') {
           const tokens = o.memberIds.map((id) => pushTokens.get(id)).filter((t): t is string => Boolean(t));
+          recipients = tokens.length;
           if (tokens.length) await sender.push(tokens, o);
         } else {
+          recipients = o.to.length;
           await Promise.all(o.to.map((to) => sender.sms(to, o.body)));
         }
+        if (recipients) onResult({ message: o, recipients, ok: true, sentAt: Date.now() });
       } catch (e) {
         log(`delivery failed (${o.channel}): ${e instanceof Error ? e.message : e}`);
+        onResult({ message: o, recipients, ok: false, sentAt: Date.now() });
       }
     }),
   );

@@ -207,6 +207,48 @@ test('on-device card is re-grounded by the server', async () => {
   assert.equal(card.requestedAction, null);
 });
 
+test('field-test report: delivery latency, battery drain, check-in responses', async () => {
+  const t = await setup();
+  // Cy misses a check-in; Ana answers hers quickly.
+  t.advance(20);
+  t.runDue();
+  t.advance(1);
+  await t.call('POST', '/v1/check-in', t.ana);
+  await t.call('POST', '/v1/check-in', t.bea);
+  t.advance(9);
+  t.runDue();
+  await t.idle();
+  // Two hours of Ana's phone: 80% -> 70%, with a charging stretch that must be ignored.
+  const base = T0 + 30 * MIN;
+  const samples = [0, 30, 60, 90, 120].map((m, i) => ({
+    at: base + m * MIN - 120 * MIN,
+    battery: [0.8, 0.775, 0.75, 0.725, 0.7][i],
+    charging: false,
+    proximity: 'poweredOn',
+    liveLocation: 'off',
+    sightings: 3,
+  }));
+  samples.push({ at: base, battery: 0.9, charging: true, proximity: 'poweredOn', liveLocation: 'off', sightings: 0 });
+  assert.equal((await t.call('POST', '/v1/diagnostics', t.ana, { samples })).json.stored, 6);
+
+  const r = (await t.call('GET', '/v1/report', t.ana)).json;
+  const alert = r.alerts.find((a: any) => a.channel === 'push' && a.kind === 'group-alert');
+  assert.equal(alert.count, 1);
+  assert.equal(alert.okRate, 1);
+  assert.equal(alert.medianMs, 0, 'fake clock: no scheduler lag');
+  const ana = r.battery.find((b: any) => b.member === 'Ana');
+  assert.equal(ana.drainPerHour, 5, '10 points over 2 hours, charging excluded');
+  assert.equal(ana.bluetooth, 'poweredOn');
+  assert.equal(r.bluetooth.find((b: any) => b.member === 'Ana').sightings, 15);
+  const anaCheck = r.checkIns.find((c: any) => c.member === 'Ana');
+  assert.equal(anaCheck.prompts, 1);
+  assert.equal(anaCheck.medianResponseS, 60);
+  assert.equal(r.checkIns.find((c: any) => c.member === 'Cy').overdue, 1);
+  const md = await t.app.inject({ method: 'GET', url: '/v1/report?format=md', headers: { authorization: `Bearer ${t.ana}` } });
+  assert.match(md.body, /### Battery \(excluding time on charge\)/);
+  assert.match(md.body, /\| Ana \| 2 h \| 5% \|/);
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

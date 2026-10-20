@@ -361,6 +361,18 @@ export function stageAt(m: Member, now: Millis): Stage {
   return 'escalated';
 }
 
+/**
+ * When a timer-driven alert for this member was due: the moment the threshold
+ * was crossed. Used to measure scheduler lag + delivery time in field tests.
+ */
+export function alertDueAt(m: Member, kind: Effect['kind']): Millis | null {
+  const grace = m.policy.graceMin * MIN;
+  if (kind === 'group-alert') return m.nextDueAt + grace;
+  if (kind === 'contacts-alert' && m.policy.escalateAfterMin !== null) return m.nextDueAt + grace + m.policy.escalateAfterMin * MIN;
+  if (kind === 'prompt') return m.nextDueAt;
+  return null;
+}
+
 /** When the next stage change could happen — lets a host sleep precisely. */
 export function nextWakeAt(session: Session): Millis | null {
   if (session.endedAt !== null) return null;

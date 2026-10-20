@@ -14,6 +14,7 @@ export interface SmsMessage {
   channel: 'sms';
   to: string[];
   body: string;
+  data: { sessionId: string; memberId: string; kind: Effect['kind'] };
 }
 
 export type Outbound = PushMessage | SmsMessage;
@@ -52,7 +53,7 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
       case 'contacts-alert': {
         const i = incident(session, m.id, now);
         const to = m.policy.contacts.map((c) => c.phone);
-        if (i && to.length) out.push({ channel: 'sms', to, body: incidentText(i, session.name) });
+        if (i && to.length) out.push({ channel: 'sms', to, body: incidentText(i, session.name), data: { sessionId: session.id, memberId: m.id, kind: e.kind } });
         break;
       }
       case 'responder':
@@ -80,6 +81,7 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
             channel: 'sms',
             to: m.policy.contacts.map((c) => c.phone),
             body: `[Huddle · ${session.name}] All clear: ${e.byId === m.id ? `${m.name} checked in and is okay` : `${name(e.byId)} marked ${m.name} as safe`} (${clock.format(now)}). No action needed.`,
+            data: { sessionId: session.id, memberId: m.id, kind: e.kind },
           });
         break;
       case 'left':

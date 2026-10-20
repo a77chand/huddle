@@ -5,6 +5,18 @@ import { nextWakeAt, type Millis, type Session } from '@huddle/core';
 /** Unambiguous characters for join codes people read aloud in a loud room. */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+export interface Diagnostic {
+  at: Millis;
+  battery: number | null;
+  lowPower: boolean;
+  charging: boolean;
+  proximity: string | null;
+  liveLocation: string | null;
+  appState: string | null;
+  /** Bluetooth sightings recorded since the previous sample. */
+  sightings: number | null;
+}
+
 export interface Auth {
   sessionId: string;
   memberId: string;
@@ -33,6 +45,30 @@ export class Store {
         hash TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
         member_id TEXT NOT NULL
+      );
+      -- Field-test measurements: every notification attempt, with timing.
+      CREATE TABLE IF NOT EXISTS deliveries (
+        session_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        recipients INTEGER NOT NULL,
+        due_at INTEGER NOT NULL,
+        sent_at INTEGER NOT NULL,
+        ok INTEGER NOT NULL
+      );
+      -- Opt-in phone diagnostics (battery, radios), sampled every few minutes.
+      CREATE TABLE IF NOT EXISTS diagnostics (
+        session_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        battery REAL,
+        low_power INTEGER,
+        charging INTEGER,
+        proximity TEXT,
+        live_location TEXT,
+        app_state TEXT,
+        sightings INTEGER
       );
       CREATE TABLE IF NOT EXISTS push_tokens (
         session_id TEXT NOT NULL,
@@ -80,6 +116,10 @@ export class Store {
     return row?.join_code ?? null;
   }
 
+  allSessionIds(): string[] {
+    return (this.db.prepare('SELECT id FROM sessions ORDER BY ends_at').all() as { id: string }[]).map((r) => r.id);
+  }
+
   /** Sessions whose next stage change is due. */
   due(now: Millis): string[] {
     return (this.db.prepare('SELECT id FROM sessions WHERE wake_at IS NOT NULL AND wake_at <= ?').all(now) as { id: string }[]).map(
@@ -87,10 +127,50 @@ export class Store {
     );
   }
 
+  logDelivery(d: { sessionId: string; memberId: string; kind: string; channel: string; recipients: number; dueAt: Millis; sentAt: Millis; ok: boolean }) {
+    this.db
+      .prepare('INSERT INTO deliveries VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(d.sessionId, d.memberId, d.kind, d.channel, d.recipients, d.dueAt, d.sentAt, d.ok ? 1 : 0);
+  }
+
+  addDiagnostics(auth: Auth, samples: Diagnostic[]) {
+    const stmt = this.db.prepare('INSERT INTO diagnostics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const s of samples)
+      stmt.run(auth.sessionId, auth.memberId, s.at, s.battery, s.lowPower ? 1 : 0, s.charging ? 1 : 0, s.proximity, s.liveLocation, s.appState, s.sightings);
+  }
+
+  deliveries(sessionId: string) {
+    return this.db.prepare('SELECT * FROM deliveries WHERE session_id = ? ORDER BY sent_at').all(sessionId) as {
+      member_id: string;
+      kind: string;
+      channel: string;
+      recipients: number;
+      due_at: number;
+      sent_at: number;
+      ok: number;
+    }[];
+  }
+
+  diagnostics(sessionId: string) {
+    return this.db.prepare('SELECT * FROM diagnostics WHERE session_id = ? ORDER BY member_id, at').all(sessionId) as {
+      member_id: string;
+      at: number;
+      battery: number | null;
+      low_power: number;
+      charging: number;
+      proximity: string | null;
+      live_location: string | null;
+      app_state: string | null;
+      sightings: number | null;
+    }[];
+  }
+
   /** Delete sessions that ended long ago, with their tokens. Nothing is kept forever. */
   purge(olderThan: Millis) {
     const ids = (this.db.prepare('SELECT id FROM sessions WHERE ends_at < ?').all(olderThan) as { id: string }[]).map((r) => r.id);
     for (const id of ids) {
+      this.db.prepare('DELETE FROM deliveries WHERE session_id = ?').run(id);
+      this.db.prepare('DELETE FROM diagnostics WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM tokens WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM push_tokens WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);

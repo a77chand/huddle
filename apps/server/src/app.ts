@@ -6,6 +6,7 @@ import * as core from '@huddle/core';
 import { HuddleError, type CheckInPolicy, type GeoFix, type Result, type Session } from '@huddle/core';
 import { bareCard, type CardMaker } from './ai.ts';
 import { render } from './messages.ts';
+import { buildReport, toMarkdown } from './report.ts';
 import { deliver, type Sender } from './notify.ts';
 import { Store, type Auth } from './store.ts';
 
@@ -62,13 +63,27 @@ export async function buildApp(opts: AppOptions) {
     }
   }
 
-  /** Persist a result, then notify phones and contacts. Delivery never delays the response. */
-  function commit(r: Result) {
+  /**
+   * Persist a result, then notify phones and contacts. Delivery never delays the response.
+   * `dueAt` is when the event should have happened (for the field-test latency report).
+   */
+  function commit(r: Result, dueFor: (memberId: string, kind: string) => number = () => now()) {
     store.save(r.session);
     broadcast(r.session);
     if (r.effects.length) {
       const out = render(r.session, r.effects, now());
-      const p = deliver(sender, store.pushTokens(r.session.id), out, log).finally(() => pending.delete(p));
+      const p = deliver(sender, store.pushTokens(r.session.id), out, log, (d) =>
+        store.logDelivery({
+          sessionId: d.message.data.sessionId,
+          memberId: d.message.data.memberId,
+          kind: d.message.channel === 'push' ? `${d.message.data.kind}:${d.message.urgency}` : d.message.data.kind,
+          channel: d.message.channel,
+          recipients: d.recipients,
+          dueAt: dueFor(d.message.data.memberId, d.message.data.kind),
+          sentAt: Math.max(now(), dueFor(d.message.data.memberId, d.message.data.kind)),
+          ok: d.ok,
+        }),
+      ).finally(() => pending.delete(p));
       pending.add(p);
     }
     return r.session;
@@ -206,6 +221,41 @@ export async function buildApp(opts: AppOptions) {
     return mutate(req, (s, me, t) => core.attachCard(s, me, card, t));
   });
 
+  /** Opt-in field-test samples from the phone: battery and radio state. */
+  app.post('/v1/diagnostics', async (req) => {
+    const a = authed(req);
+    const list = body(req).samples;
+    if (!Array.isArray(list)) throw new HttpError(400, 'bad-request', 'samples must be an array');
+    const t = now();
+    const samples = list.slice(0, 100).flatMap((x) => {
+      const s = (x ?? {}) as Record<string, unknown>;
+      const at = typeof s.at === 'number' && s.at <= t + 60_000 && s.at > t - 24 * 3600_000 ? s.at : null;
+      if (at === null) return [];
+      const battery = typeof s.battery === 'number' && s.battery >= 0 && s.battery <= 1 ? s.battery : null;
+      const short = (v: unknown) => (typeof v === 'string' ? v.slice(0, 32) : null);
+      return [{
+        at,
+        battery,
+        lowPower: s.lowPower === true,
+        charging: s.charging === true,
+        proximity: short(s.proximity),
+        liveLocation: short(s.liveLocation),
+        appState: short(s.appState),
+        sightings: typeof s.sightings === 'number' ? Math.max(0, Math.floor(s.sightings)) : null,
+      }];
+    });
+    store.addDiagnostics(a, samples);
+    return { stored: samples.length };
+  });
+
+  /** Field-test report for this session (JSON, or Markdown with ?format=md). */
+  app.get('/v1/report', async (req, reply) => {
+    const a = authed(req);
+    const r = buildReport(a.session, store.deliveries(a.sessionId), store.diagnostics(a.sessionId));
+    if ((req.query as Record<string, string>).format === 'md') return reply.type('text/markdown').send(toMarkdown(r));
+    return r;
+  });
+
   app.post('/v1/battery', async (req) => {
     const b = body(req);
     return mutate(req, (s, me, t) => core.reportBattery(s, me, num(b.level, 'level'), t, geo(b.location, t)));
@@ -258,7 +308,13 @@ export async function buildApp(opts: AppOptions) {
     const t = now();
     for (const id of store.due(t)) {
       const s = store.get(id);
-      if (s) commit(core.tick(s, t));
+      if (!s) continue;
+      // Due = the threshold that fired (from the state before the tick), so the report includes scheduler lag.
+      commit(core.tick(s, t), (memberId, kind) => {
+        const m = s.members.find((x) => x.id === memberId);
+        const due = m ? core.alertDueAt(m, kind as core.Effect['kind']) : null;
+        return due !== null && due <= t ? due : t;
+      });
     }
   }
 
