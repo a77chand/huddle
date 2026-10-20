@@ -17,6 +17,6 @@
     "react": "19.3.0"
   },
   "allowScripts": {
-    "llama.rn@0.12.9": true
+    "llama.rn@0.13.0-rc.7": true
   }
 }
