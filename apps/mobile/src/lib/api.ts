@@ -1,12 +1,4 @@
-import type { AlertCard, Board, CheckInPolicy, GeoFix, Incident, Sealed, TimelineEntry } from '@huddle/core';
-
-/** End-to-end key state for this member (encrypted huddles only). */
-export interface KeyState {
-  epoch: number;
-  claimed: boolean;
-  mine: { epoch: number; blob: string }[];
-  needWrap: { memberId: string; publicKey: string }[];
-}
+import type { AlertCard, Board, CheckInPolicy, GeoFix, Incident, KeyState, Sealed, TimelineEntry } from '@huddle/core';
 
 /** Location fields for any location-bearing request. */
 export interface LocationPayload {

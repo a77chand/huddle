@@ -21,6 +21,7 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 - **Bluetooth "last seen near".** Phones quietly note which friends' phones were nearby, even with no signal.
 - **Low-battery alert.** At 5% the group gets your last location before your phone dies.
 - **Optional live location**, off by default, using low-power positioning.
+- **End-to-end encrypted.** Locations, voice notes and statuses are encrypted on the phone, and the server stores only ciphertext ([how and from whom](docs/SECURITY.md)).
 - **Fallbacks.** No data connection? SOS opens a pre-filled text using the phone's own SMS.
 
 ## How an alert works
@@ -80,6 +81,7 @@ A night out is long and people want their phones alive at 2 AM, so Huddle is bui
 These are design choices, not measurements yet. Real-device battery numbers will go here after field testing.
 
 On privacy:
+- **End-to-end encryption.** Each phone has an X25519 key pair. The group shares a key the server never sees (passed between phones sealed to each member's public key), and it rotates when someone leaves. Locations, cards and statuses are encrypted with XChaCha20-Poly1305 and bound to their huddle, member and field. The one deliberate exception is emergency texts to contacts outside the app; see [SECURITY.md](docs/SECURITY.md) for that and the full threat model.
 - Leaving a session wipes your location.
 - Sessions end automatically, and ended sessions are deleted after 24 h.
 - Only hashes of access tokens are stored.
@@ -192,7 +194,7 @@ CI runs all of the above and bundles the app. It also compiles full native Andro
 ## Status
 
 Verified:
-- 34 automated tests across the engine, server and AI service.
+- 42 automated tests across the engine, server and AI service, including the encryption protocol with three simulated phones (key exchange, leave and re-key race).
 - A fine-tuned model evaluated on a held-out set.
 - End-to-end runs with real Whisper and Gemma on spoken English and Spanish.
 - Native Android and iOS builds compile, including Bluetooth, llama.cpp and whisper.cpp.
@@ -206,7 +208,6 @@ Verified:
 - Native home-screen widget and watch complication for one-tap check-in.
 - Fine-tune v2 with real (consented) voice notes from noisy venues, and on-phone latency numbers.
 - Web link for SMS contacts to see the live incident without installing the app.
-- End-to-end encryption of locations and voice cards with a group key, so the server stores only ciphertext.
 
 ## License
 

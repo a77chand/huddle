@@ -222,10 +222,12 @@ export async function buildApp(opts: AppOptions) {
       return { memberId, blob };
     });
     if (!wraps.length) throw new HttpError(400, 'bad-request', 'no wraps');
+    // The server can't check who really holds a key. It records holders by their own wrap: a
+    // member not yet recorded (e.g. joined by invite link) must include theirs, which also
+    // means the first upload for an epoch claims it. Wraps never overwrite existing ones.
     const holders = store.wrappedMembers(s.id, epoch);
-    if (holders.size === 0 && !wraps.some((w) => w.memberId === a.memberId))
-      throw new HttpError(400, 'claim-needs-self', 'the first upload for an epoch must include your own wrap');
-    if (holders.size > 0 && !holders.has(a.memberId)) throw new HttpError(403, 'not-holder', 'only members who hold this key can share it');
+    if (!holders.has(a.memberId) && !wraps.some((w) => w.memberId === a.memberId))
+      throw new HttpError(holders.size === 0 ? 400 : 403, holders.size === 0 ? 'claim-needs-self' : 'not-holder', 'include a wrap for yourself');
     if (!store.putWraps(s.id, a.memberId, epoch, wraps)) throw new HttpError(409, 'already-wrapped', 'another phone already shared this key');
     broadcast(s);
     return view(s, a.memberId);

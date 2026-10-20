@@ -18,6 +18,7 @@ New huddles are end-to-end encrypted.
 - Each phone generates an **X25519** key pair. Only the public key goes to the server.
 - The group shares a random 256-bit key per **epoch**. Phones hand it to each other *sealed* to the recipient's public key (ephemeral X25519 → HKDF-SHA256 → XChaCha20-Poly1305). The server relays these sealed keys but can't open them.
 - Fields are encrypted with **XChaCha20-Poly1305**. The associated data binds each ciphertext to its huddle, member and field, so a stored location can't be moved to another person or field without failing to decrypt.
+- The server can't verify who holds a key, so it only enforces that wraps are never overwritten, and that a member not yet recorded as a holder includes their own wrap. That lets invite-link joiners share the key too. When two phones race to create a new epoch's key, one wins and the other adopts it. [Tested with three simulated phones](../apps/server/test/app.test.ts).
 - **When someone leaves, the epoch advances.** The first remaining phone online shares a fresh key with everyone else, so the person who left can't read anything new.
 - **Bluetooth IDs** in encrypted huddles are derived from the group key, so the server can't compute anyone's rotating IDs.
 - Libraries: [`@noble/curves`, `@noble/ciphers`, `@noble/hashes`](https://paulmillr.com/noble/), which are audited, dependency-free and pure JavaScript. The same code runs on phones and in the tests.
@@ -36,6 +37,7 @@ New huddles are end-to-end encrypted.
 | A former member reading new data | Yes. Keys rotate on leave. |
 | **An actively malicious server** that substitutes public keys during the key exchange | **Partly.** Joining by **invite link** carries the key directly, without the server. Members can also compare **safety codes** (a public-key fingerprint, shown on each friend's page) in person. Without either, a malicious server could intercept the key exchange. |
 | A compromised phone | No. A member's phone can read everything that member can. |
+| A malicious *member* | No. Members are trusted with the group key. One could also upload a bogus key wrap for themselves, which only stops their own phone from being sent the real key. |
 | Metadata (who is in a huddle, when people check in) | No. The server needs it for escalation. |
 
 ## Other protections

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import WebSocket from 'ws';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { generateGroupKey, generateKeyPair, open, seal, unwrapKey, wrapKey } from '@huddle/core';
+import { decryptBoard, generateGroupKey, generateKeyPair, open, planKeySync, seal, unwrapKey, wrapKey } from '@huddle/core';
 import { bareCard, type CardMaker } from '../src/ai.ts';
 import { buildApp } from '../src/app.ts';
 import type { PushMessage } from '../src/messages.ts';
@@ -290,8 +290,8 @@ test('end-to-end encrypted huddle: key exchange, ciphertext at rest, contact-onl
   const cy = joined.json.token;
   const cyId = joined.json.me;
   assert.deepEqual(joined.json.keys.mine, []);
-  // Cy can't claim an already-claimed epoch, and can't wrap before holding the key.
-  assert.equal((await call('POST', '/v1/keys', cy, { epoch: 1, wraps: [{ memberId: cyId, blob: wrapKey(generateGroupKey(rand), cyKp.publicKey, 1, rand) }] })).status, 403);
+  // A member not recorded as holding the key can't hand wraps to others without attesting their own.
+  assert.equal((await call('POST', '/v1/keys', cy, { epoch: 1, wraps: [{ memberId: created.json.me, blob: wrapKey(generateGroupKey(rand), anaKp.publicKey, 1, rand) }] })).status, 403);
   // Ana's phone sees Cy needs the key and wraps it.
   const anaView = (await call('GET', '/v1/session', ana)).json;
   assert.deepEqual(anaView.keys.needWrap, [{ memberId: cyId, publicKey: cyKp.publicKey }]);
@@ -344,6 +344,78 @@ test('end-to-end encrypted huddle: key exchange, ciphertext at rest, contact-onl
   assert.equal(after.epoch, 2);
   assert.equal(after.claimed, false);
   assert.deepEqual(after.needWrap.map((x: any) => x.memberId), [created.json.me]);
+  await h.app.close();
+});
+
+test('three phones run the app\'s key-sync logic: claim, invite link, auto-share, leave, racing re-key', async () => {
+  const rand = (n: number) => new Uint8Array(randomBytes(n));
+  let clock = T0;
+  const h = await buildApp({ store: new Store(':memory:'), sender: { push: async () => {}, sms: async () => {} }, makeCard: async () => bareCard(null), now: () => clock });
+  const http = async (method: 'GET' | 'POST', url: string, token?: string, payload?: object) => {
+    const res = await h.app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload });
+    return { status: res.statusCode, json: res.json() };
+  };
+  /** A phone: its key pair, its keys, and the same sync step the app runs on every view. */
+  const phone = (name: string) => ({ name, kp: generateKeyPair(rand), epochs: {} as Record<string, string>, token: '', id: '' });
+  type Phone = ReturnType<typeof phone>;
+  const sync = async (p: Phone) => {
+    const v = (await http('GET', '/v1/session', p.token)).json;
+    const plan = planKeySync(v.keys, p.epochs, v.me, p.kp, rand);
+    let ok = true;
+    if (plan.upload) ok = (await http('POST', '/v1/keys', p.token, plan.upload)).status === 200;
+    // On a lost race, drop a key we generated ourselves (exactly what the app does).
+    p.epochs = ok ? plan.epochs : Object.fromEntries(Object.entries(plan.epochs).filter(([e]) => p.epochs[e] || e !== String(plan.upload!.epoch)));
+    return v;
+  };
+  const policy = { intervalMin: 20, graceMin: 10, escalateAfterMin: null, contacts: [] };
+  const [ana, bea, cy] = [phone('Ana'), phone('Bea'), phone('Cy')];
+
+  const created = (await http('POST', '/v1/sessions', undefined, { name: 'Gig', memberName: 'Ana', e2e: true, publicKey: ana.kp.publicKey, policy })).json;
+  Object.assign(ana, { token: created.token, id: created.me });
+  const sid = created.board.sessionId;
+  await sync(ana); // claims epoch 1
+  assert.ok(ana.epochs['1']);
+
+  // Bea joins by invite link: the key comes with the link, not from the server.
+  const b = (await http('POST', '/v1/join', undefined, { joinCode: created.joinCode, memberName: 'Bea', publicKey: bea.kp.publicKey, policy })).json;
+  Object.assign(bea, { token: b.token, id: b.me, epochs: { '1': ana.epochs['1']! } });
+  // Cy joins by typing the code: no key until a member's phone shares it.
+  const c = (await http('POST', '/v1/join', undefined, { joinCode: created.joinCode, memberName: 'Cy', publicKey: cy.kp.publicKey, policy })).json;
+  Object.assign(cy, { token: c.token, id: c.me });
+  await sync(cy);
+  assert.deepEqual(cy.epochs, {}, 'Cy cannot claim an epoch someone already holds');
+  await sync(bea); // Bea's phone shares the key with Cy (and with herself on the server)
+  await sync(cy);
+  assert.equal(cy.epochs['1'], ana.epochs['1']);
+
+  // Bea shares a sealed location; Cy's phone decrypts it and builds the incident locally.
+  const fix = { lat: 51.5074, lng: -0.1278, at: clock };
+  await http('POST', '/v1/sos', bea.token, {
+    sealedLocation: { blob: seal(fix, { sessionId: sid, memberId: bea.id, field: 'location', epoch: 1, key: bea.epochs['1']! }, rand), at: clock },
+    sealedStatus: seal('Come to the side door', { sessionId: sid, memberId: bea.id, field: 'status', epoch: 1, key: bea.epochs['1']! }, rand),
+  });
+  const seenByCy = decryptBoard((await http('GET', '/v1/session', cy.token)).json.board, cy.epochs, clock);
+  const beaInc = seenByCy.incidents.find((i) => i.name === 'Bea')!;
+  assert.ok(beaInc.known.some((k) => k.includes('"Come to the side door"')));
+  assert.ok(beaInc.known.some((k) => k.includes('maps.google.com/?q=51.50740,-0.12780')));
+  await http('POST', `/v1/members/${bea.id}/resolve`, cy.token);
+
+  // Bea leaves: epoch 2. Ana and Cy race to claim it; exactly one wins, both end with the same key.
+  await http('POST', '/v1/leave', bea.token);
+  const [va, vc] = await Promise.all([http('GET', '/v1/session', ana.token), http('GET', '/v1/session', cy.token)]);
+  const planA = planKeySync(va.json.keys, ana.epochs, ana.id, ana.kp, rand);
+  const planC = planKeySync(vc.json.keys, cy.epochs, cy.id, cy.kp, rand);
+  assert.ok(planA.upload && planC.upload, 'both phones try to claim');
+  const [ra, rc] = await Promise.all([http('POST', '/v1/keys', ana.token, planA.upload!), http('POST', '/v1/keys', cy.token, planC.upload!)]);
+  assert.deepEqual([ra.status, rc.status].sort(), [200, 409], 'one claim wins');
+  const winner = ra.status === 200 ? ana : cy;
+  const loser = winner === ana ? cy : ana;
+  winner.epochs = (winner === ana ? planA : planC).epochs;
+  await sync(loser);
+  assert.equal(loser.epochs['2'], winner.epochs['2'], 'the loser adopts the winner\'s key');
+  assert.notEqual(winner.epochs['2'], ana.epochs['1']);
+  // Bea's token no longer works after leaving, and she never received epoch 2.
+  assert.deepEqual(Object.keys(bea.epochs), ['1']);
   await h.app.close();
 });
 
