@@ -1,10 +1,25 @@
-import type { Board, CheckInPolicy, GeoFix, Incident, TimelineEntry } from '@huddle/core';
+import type { AlertCard, Board, CheckInPolicy, GeoFix, Incident, Sealed, TimelineEntry } from '@huddle/core';
+
+/** End-to-end key state for this member (encrypted huddles only). */
+export interface KeyState {
+  epoch: number;
+  claimed: boolean;
+  mine: { epoch: number; blob: string }[];
+  needWrap: { memberId: string; publicKey: string }[];
+}
+
+/** Location fields for any location-bearing request. */
+export interface LocationPayload {
+  location?: GeoFix;
+  sealedLocation?: Sealed;
+}
 
 export interface View {
   me: string;
   joinCode: string | null;
   /** Members-only secret for rotating Bluetooth IDs; null once the session ends. */
   proximityKey: string | null;
+  keys: KeyState | null;
   board: Board;
   incidents: Incident[];
   timeline: TimelineEntry[];
@@ -45,23 +60,39 @@ export function client(serverUrl: string, token: string | null) {
   }
 
   return {
-    create: (b: { name: string; memberName: string; phone?: string; policy: CheckInPolicy; durationHours: number; timeZone: string }) =>
-      call<View & { token: string }>('POST', '/v1/sessions', b),
-    join: (b: { joinCode: string; memberName: string; phone?: string; policy: CheckInPolicy }) =>
+    create: (b: {
+      name: string;
+      memberName: string;
+      phone?: string;
+      policy: CheckInPolicy;
+      durationHours: number;
+      timeZone: string;
+      e2e: boolean;
+      publicKey: string;
+    }) => call<View & { token: string }>('POST', '/v1/sessions', b),
+    join: (b: { joinCode: string; memberName: string; phone?: string; policy: CheckInPolicy; publicKey: string }) =>
       call<View & { token: string }>('POST', '/v1/join', b),
     view: () => call<View>('GET', '/v1/session'),
-    checkIn: (location?: GeoFix, battery?: number) => call<View>('POST', '/v1/check-in', { location, battery }),
+    checkIn: (loc: LocationPayload, battery?: number) => call<View>('POST', '/v1/check-in', { ...loc, battery }),
     snooze: (minutes: number) => call<View>('POST', '/v1/snooze', { minutes }),
-    sos: (location?: GeoFix, status?: string) => call<View>('POST', '/v1/sos', { location, status }),
+    sos: (loc: LocationPayload, status?: { status?: string; sealedStatus?: string }) => call<View>('POST', '/v1/sos', { ...loc, ...status }),
     status: (status: string) => call<View>('POST', '/v1/status', { status }),
+    /** Unencrypted huddles get the updated view; encrypted ones get the card back to seal. */
     voice: (data: Blob, type: string, presetStatus?: string) =>
-      call<View>('POST', `/v1/voice${presetStatus ? `?preset_status=${encodeURIComponent(presetStatus)}` : ''}`, undefined, { data, type }),
+      call<View | { card: AlertCard }>(
+        'POST',
+        `/v1/voice${presetStatus ? `?preset_status=${encodeURIComponent(presetStatus)}` : ''}`,
+        undefined,
+        { data, type },
+      ),
+    cardSealed: (blob: string) => call<View>('POST', '/v1/card-sealed', { blob }),
+    keys: (epoch: number, wraps: { memberId: string; blob: string }[]) => call<View>('POST', '/v1/keys', { epoch, wraps }),
     card: (b: { transcript: string; fields: Record<string, unknown>; extractor: string; presetStatus?: string }) =>
       call<View>('POST', '/v1/card', b),
     diagnostics: (samples: Record<string, unknown>[]) => call<{ stored: number }>('POST', '/v1/diagnostics', { samples }),
-    location: (live: boolean, location?: GeoFix) => call<View>('POST', '/v1/location', { live, location }),
+    location: (live: boolean, loc: LocationPayload = {}) => call<View>('POST', '/v1/location', { live, ...loc }),
     proximity: (sightings: { memberId: string; at: number }[]) => call<View>('POST', '/v1/proximity', { sightings }),
-    battery: (level: number, location?: GeoFix) => call<View>('POST', '/v1/battery', { level, location }),
+    battery: (level: number, loc: LocationPayload = {}) => call<View>('POST', '/v1/battery', { level, ...loc }),
     ack: (id: string) => call<View>('POST', `/v1/members/${id}/ack`),
     escalate: (id: string) => call<View>('POST', `/v1/members/${id}/escalate`),
     resolve: (id: string) => call<View>('POST', `/v1/members/${id}/resolve`),

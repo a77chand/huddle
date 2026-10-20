@@ -26,6 +26,7 @@ export default function Setup() {
   const [shareLiveLocation, setShareLiveLocation] = useState(p?.shareLiveLocation === true);
   const [onDeviceAI, setOnDeviceAI] = useState(p?.onDeviceAI === true);
   const [fieldTest, setFieldTest] = useState(p?.fieldTest === true);
+  const [contactLocation, setContactLocation] = useState(p?.contactLocation !== false);
   const [modelsReady, setModelsReady] = useState(() => allInstalled());
   const [progress, setProgress] = useState<number | null>(null);
   const modelMB = Math.round(MODELS.reduce((n, m) => n + m.bytes, 0) / 1e6);
@@ -64,6 +65,7 @@ export default function Setup() {
       shareLiveLocation,
       onDeviceAI: onDeviceAI && modelsReady,
       fieldTest,
+      contactLocation,
       policy: {
         intervalMin: +interval,
         graceMin: +grace,
@@ -125,6 +127,14 @@ export default function Setup() {
           <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Text them immediately when I press SOS</Text>
           <Switch value={sosContacts} onValueChange={setSosContacts} />
         </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Include my location in emergency texts</Text>
+          <Switch value={contactLocation} onValueChange={setContactLocation} />
+        </View>
+        <P muted>
+          Huddles are end-to-end encrypted, so the server can't read your location. Your contacts don't have the app, so to put your location in their
+          text the server keeps only your latest one, deleted when the huddle ends. Turn this off and they get times, not places.
+        </P>
       </Card>
 
       <Card>

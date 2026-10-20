@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import {
+  bytesToUtf8,
   envelopeEpoch,
   fingerprint,
   fromB64,
@@ -12,11 +13,19 @@ import {
   seal,
   toB64,
   unwrapKey,
+  utf8ToBytes,
   wrapKey,
 } from '../src/e2e.ts';
 import { attachSealedCard, board, checkIn, createSession, incident, incidentFromRow, join, leave, sos, tick } from '../src/index.ts';
 
 const rand = (n: number) => new Uint8Array(randomBytes(n));
+
+test('built-in UTF-8 matches the platform encoder', () => {
+  for (const s of ['', 'abc', 'Estoy en la entrada sur — ñ', 'मुझे चक्कर', '😀 emoji', 'Je suis devant la scène']) {
+    assert.deepEqual(utf8ToBytes(s), new TextEncoder().encode(s));
+    assert.equal(bytesToUtf8(utf8ToBytes(s)), s);
+  }
+});
 
 test('base64url round-trips every length', () => {
   for (let n = 0; n < 70; n++) {

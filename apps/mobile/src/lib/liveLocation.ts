@@ -4,6 +4,7 @@ import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
 import type { GeoFix } from '@huddle/core';
 import { ApiError, client } from './api';
+import { backgroundLocationPayload } from './keys';
 import { storage } from './storage';
 
 /**
@@ -62,7 +63,8 @@ async function upload(fix: GeoFix): Promise<boolean> {
   const [profile, membership] = await Promise.all([storage.profile(), storage.membership()]);
   if (!profile || !membership || !profile.shareLiveLocation) return false;
   try {
-    await client(profile.serverUrl, membership.token).location(true, fix);
+    const escrow = profile.contactLocation !== false && profile.policy.contacts.length > 0;
+    await client(profile.serverUrl, membership.token).location(true, await backgroundLocationPayload(membership, fix, escrow));
     lastSent = fix;
     return true;
   } catch (e) {

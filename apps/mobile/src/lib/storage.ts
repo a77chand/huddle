@@ -16,12 +16,19 @@ export interface Profile {
   onDeviceAI?: boolean;
   /** Upload battery and radio samples during huddles, for the field-test report. */
   fieldTest?: boolean;
+  /**
+   * Encrypted huddles: let the server keep your latest location (only that) for
+   * emergency texts to your contacts, who don't have the app. Default on.
+   */
+  contactLocation?: boolean;
 }
 
 export interface Membership {
   token: string;
   sessionId: string;
   memberId: string;
+  /** End-to-end encrypted huddle (needed by the background location task). */
+  e2e?: boolean;
 }
 
 export const DEFAULT_SERVER: string =

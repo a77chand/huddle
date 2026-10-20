@@ -17,7 +17,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { x25519 } from '@noble/curves/ed25519.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes } from '@noble/hashes/utils.js';
 
 export type Random = (n: number) => Uint8Array;
 
@@ -59,7 +59,31 @@ export function fromB64(s: string): Uint8Array {
   return out.subarray(0, o);
 }
 
-const decoder = new TextDecoder();
+// Self-contained UTF-8 so the same code runs on any JS engine (no TextEncoder/TextDecoder needed).
+export function utf8ToBytes(s: string): Uint8Array {
+  const out: number[] = [];
+  for (const ch of s) {
+    let c = ch.codePointAt(0)!;
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return new Uint8Array(out);
+}
+
+export function bytesToUtf8(b: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < b.length; ) {
+    const x = b[i]!;
+    const n = x < 0x80 ? 1 : x < 0xe0 ? 2 : x < 0xf0 ? 3 : 4;
+    let c = n === 1 ? x : x & (0xff >> (n + 1));
+    for (let k = 1; k < n; k++) c = (c << 6) | (b[i + k]! & 63);
+    s += String.fromCodePoint(c);
+    i += n;
+  }
+  return s;
+}
 
 // --------------------------------------------------------------- keys
 
@@ -134,7 +158,7 @@ export function open<T>(
   if (!key) throw new Error(`missing key for epoch ${epoch}`);
   const raw = fromB64(envelope.slice(envelope.indexOf('.', 3) + 1));
   const pt = xchacha20poly1305(fromB64(key), raw.subarray(0, 24), aad(ctx.sessionId, ctx.memberId, ctx.field)).decrypt(raw.subarray(24));
-  return JSON.parse(decoder.decode(pt)) as T;
+  return JSON.parse(bytesToUtf8(pt)) as T;
 }
 
 /**

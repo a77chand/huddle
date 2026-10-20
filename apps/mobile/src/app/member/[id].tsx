@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Linking, ScrollView, Text, View } from 'react-native';
+import { fingerprint } from '@huddle/core/e2e';
 import { useHuddle } from '../../lib/huddle';
 import { ago, Button, Card, clock, H, P, Pill, STATUS_LABEL, statusColor, useTheme } from '../../ui/kit';
 
@@ -77,6 +78,12 @@ export default function Member() {
           <P>Checked in {ago(row.lastCheckInAt)} ({clock(row.lastCheckInAt)}).</P>
           <P muted>Next check-in due {clock(row.nextDueAt)}.</P>
           {loc && <P muted>Location shared {ago(loc.at)}.</P>}
+          {v.board.e2e && row.publicKey && h.myPublicKey && row.id !== v.me && (
+            <P muted>
+              Safety codes — compare in person to be sure no one is intercepting: theirs {fingerprint(row.publicKey)}, yours{' '}
+              {fingerprint(h.myPublicKey)}.
+            </P>
+          )}
           {row.lastNear && (
             <P muted>
               Last near {row.lastNear.memberId === v.me ? 'you' : row.lastNear.name} {ago(row.lastNear.at)} (Bluetooth).

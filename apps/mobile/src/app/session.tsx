@@ -101,6 +101,13 @@ export default function Session() {
             {h.connection === 'live' ? 'Live' : h.connection === 'polling' ? 'Reconnecting…' : 'Offline'} · {v.board.counts.accountedFor}/
             {v.board.counts.present} accounted for · ends {clock(v.board.endsAt)}
           </Text>
+          {v.board.e2e && (
+            <Text style={{ color: h.encryptionReady ? t.ok : t.warn, fontSize: 12 }}>
+              {h.encryptionReady
+                ? '🔒 End-to-end encrypted: locations and messages are readable only by this group.'
+                : '🔒 Waiting for a friend’s phone to share the group key…'}
+            </Text>
+          )}
           {h.batterySaver ? (
             <Text style={{ color: t.muted, fontSize: 12 }}>Battery saver: Bluetooth and live location paused. Check-ins and SOS still work.</Text>
           ) : (
@@ -155,7 +162,11 @@ export default function Session() {
         <H size={18}>Friends</H>
         {v.joinCode && (
           <Pressable
-            onPress={() => Share.share({ message: `Join my huddle "${v.board.name}": code ${v.joinCode} — huddle://start?code=${v.joinCode}` })}
+            onPress={() =>
+              Share.share({
+                message: `Join my huddle "${v.board.name}": code ${v.joinCode}${h.inviteLink ? ` — ${h.inviteLink}` : ''}`,
+              })
+            }
             hitSlop={8}
           >
             <Text style={{ color: t.accent, fontWeight: '600' }}>Invite · {v.joinCode}</Text>

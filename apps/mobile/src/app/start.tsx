@@ -10,7 +10,8 @@ const DURATIONS = [4, 8, 12, 24];
 export default function Start() {
   const h = useHuddle();
   const t = useTheme();
-  const params = useLocalSearchParams<{ code?: string }>();
+  // huddle://start?code=ABC123&k=<epoch>.<key> — the key part never reaches the server.
+  const params = useLocalSearchParams<{ code?: string; k?: string }>();
   const [name, setName] = useState('');
   const [hours, setHours] = useState(8);
   const [code, setCode] = useState(params.code ?? '');
@@ -20,7 +21,7 @@ export default function Start() {
     setBusy(kind);
     try {
       if (kind === 'start') await h.start(name.trim() || 'Night out', hours);
-      else await h.join(code.trim());
+      else await h.join(code.trim(), code.trim().toUpperCase() === params.code?.toUpperCase() ? params.k : undefined);
       router.replace('/session');
     } catch (e) {
       Alert.alert(kind === 'start' ? 'Could not start' : 'Could not join', e instanceof Error ? e.message : String(e));
