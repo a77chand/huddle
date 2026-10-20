@@ -6,7 +6,7 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 
 1. **The group, not the individual.** One shared board shows who's okay, who's overdue, who asked for help, and who is already responding, so three friends don't all run to the same place while a fourth goes unnoticed.
 2. **Honest escalation.** A missed check-in is a reason to look, not proof of an emergency. Phones die and venues are loud. Huddle says *"unreachable — not confirmed in danger"* and climbs a ladder you configure, instead of crying wolf.
-3. **AI that makes alerts actionable, not alarming.** A voice note like *"I'm near the north entrance, please call me, don't come inside"* becomes a structured card. Open-weight models do the work, and every field quotes the speaker's own words. No model ever decides whether someone is in danger.
+3. **AI that makes alerts actionable, not alarming.** A voice note like *"I'm near the north entrance, please call me, don't come inside"* becomes a structured card. Open-weight models do the work, and every field quotes the speaker's own words. No model ever decides whether someone is in danger. It can run **entirely on the phone** using Huddle's own fine-tuned 0.5B model.
 
 > Huddle is not an emergency service. If someone may be in immediate danger, call your local emergency number.
 
@@ -15,7 +15,7 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 - **Shared sessions.** Start a huddle and share a 6-character code. It ends on its own after 4–24 hours.
 - **Check-ins on your own schedule.** "Still okay?" prompts are scheduled on the phone, so they work with no signal. Answer from the lock screen, or pause them ("in the cinema for 2 h").
 - **SOS** from a press-and-hold button, or a discreet shortcut such as the iPhone Action Button or Back Tap.
-- **Voice notes and quick statuses** ("Call me", "Don't come in") turned into clear instructions for friends.
+- **Voice notes and quick statuses** ("Call me", "Don't come in") turned into clear instructions for friends, on the phone or on the server.
 - **"I'm on it"** coordination, so the group knows who is handling an alert.
 - **Emergency contacts outside the app** get an SMS with what is known, then an all-clear when it's over.
 - **Bluetooth "last seen near".** Phones quietly note which friends' phones were nearby, even with no signal.
@@ -87,21 +87,35 @@ On privacy:
 
 ## The open-weight AI
 
-| Piece | Model | Runs on |
+A voice note goes through speech-to-text, then extraction into five fields (where they are, what they ask, what *not* to do, how they feel, how to reach them). Then comes the grounding check: every field must quote the transcript.
+
+| Piece | On the phone | On the server |
 |---|---|---|
-| Speech-to-text | Whisper `small` via faster-whisper, multilingual | CPU is fine |
-| Extraction | Any instruct model behind an OpenAI-compatible API (Ollama, llama.cpp, vLLM). Default: **Gemma 3 4B** | A laptop. About 7.5 s from audio to card in total |
+| Speech-to-text | Whisper base via whisper.cpp ([whisper.rn](https://github.com/mybigday/whisper.rn)), 60 MB | Whisper small via faster-whisper |
+| Extraction | **huddle-extractor-0.5b**, Huddle's fine-tune, via llama.cpp ([llama.rn](https://github.com/mybigday/llama.rn)), 398 MB | Any model behind an OpenAI-compatible API (Ollama, llama.cpp, vLLM) |
 
-Measured on the 20 hand-written voice notes in [`services/ai/evals`](services/ai/evals/voice_notes.jsonl). They include negations ("do **not** call me"), empty notes ("Help."), Spanish, Hindi-English code-switching, and statements about other people:
+On-device mode is opt-in (one-time download on Wi-Fi). The recording never leaves the phone, and it works with no signal. The server still re-checks the card's quotes, and anything that fails on the phone falls back to the server.
 
-| Extractor | Field accuracy | Invented fields | Quotes dropped by grounding |
+### Fine-tuning a model 1/8 the size
+
+[`services/ai/finetune`](services/ai/finetune) builds a labelled dataset and fine-tunes **Qwen2.5-0.5B-Instruct** with LoRA. The [model card](services/ai/finetune/MODEL_CARD.md) has the details, and the model files are in the [`extractor-v1` release](https://github.com/a77chand/huddle/releases/tag/extractor-v1).
+
+- **Data:** 4,000 synthetic notes with exact labels by construction. They cover five languages, speech-to-text-style noise (lowercase, no punctuation, fillers), negations ("don't call me"), distractors and empty notes.
+- **Training:** LoRA rank 16 on all projections, loss on the JSON answer only, about 15 minutes of GPU time on Apple Silicon with MLX. There's also a PyTorch + PEFT script for NVIDIA GPUs.
+- **Evaluation:** a **held-out test set** of 40 hand-written notes, written *before* the data generator and never used to tune it.
+
+| Extractor | Download | Held-out test | Speed (laptop) |
 |---|---|---|---|
-| Rules baseline | 77% | 1 | 0 |
-| **Gemma 3 4B** | **89%** | 4 | 2 |
+| Rules baseline | — | 68.0% | instant |
+| Gemma 3 4B, few-shot | 3.3 GB | 84.0% | 11.0 s/note |
+| **huddle-extractor-0.5b Q8** | **531 MB** | **85.0%** | 1.9 s/note |
+| **huddle-extractor-0.5b Q4** (phone default) | **398 MB** | **83.5%** | 1.6 s/note |
 
-The rules baseline was written while looking at this set, so its score is optimistic. The model's "invented" fields are grounded misreadings, not fabrications: it labeled "come to the cafe" as where the speaker *is*, rather than where to meet. The responder still sees the speaker's exact words next to every field. Reproduce with `python -m evals.run_eval -v`.
+Two findings from the experiments:
+- **Grammar-constrained JSON decoding hurt the fine-tune** (78% vs 83.5%), because the model already emits the schema. So it runs unconstrained, with grounding as the safety net.
+- **4-bit quantization cost almost nothing:** f16 and Q8 scored the same through the same serving path.
 
-Thinking models (e.g. Qwen3 with default thinking) are too slow for this path. The eval flags fallbacks so they can't pass as a model score.
+The fine-tune invents slightly more fields than Gemma (12 vs 6), mostly a destination read as the speaker's location. Each one still quotes the speaker's real words. Reproduce any row with `python -m evals.run_eval --set test -v`.
 
 ## Architecture
 
@@ -109,9 +123,12 @@ Thinking models (e.g. Qwen3 with default thinking) are too slow for this path. T
 apps/mobile                      Expo (React Native) app: iOS + Android
 apps/mobile/modules/
   huddle-proximity               Native Bluetooth module (Swift + Kotlin)
+apps/mobile/src/lib/ondevice.ts  On-device Whisper + fine-tuned extractor (whisper.cpp / llama.cpp)
 apps/server                      Node + Fastify + SQLite: sessions, escalation clock, push/SMS, live WebSocket
 packages/core                    Pure TypeScript escalation engine, shared by server and app
 services/ai                      Python: Whisper speech-to-text + open-weight LLM grounded extraction
+services/ai/finetune             Dataset generator, LoRA training (MLX / PyTorch), model card
+docs/FIELD_TEST.md               How to measure battery, Bluetooth and alert latency on a real night
 ```
 
 Design decisions that matter for safety:
@@ -149,6 +166,8 @@ EXPO_PUBLIC_SERVER_URL=http://<your-computer's-LAN-IP>:8787 npx expo run:ios   #
 
 Use a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`npx expo run:ios|android`, or `eas build --profile development`). Bluetooth, background live location and Android push all need native code that Expo Go doesn't include. In Expo Go (`npx expo start`), check-ins, SOS, location and voice notes still work, and the app labels the rest as unavailable. Push notifications also need an EAS project id.
 
+**Deploy:** the server ships with a [`fly.toml`](fly.toml) (`fly deploy`; it never scales to zero, because escalation runs on the server's clock), and the app has [EAS build profiles](apps/mobile/eas.json) (`eas build --profile preview`).
+
 **Everything with Docker:** `cp .env.example .env && docker compose up -d && docker compose exec ollama ollama pull gemma3:4b`
 
 **SMS** to emergency contacts uses Twilio. Set `TWILIO_*` in `.env`. Without it, contact alerts are logged.
@@ -173,20 +192,21 @@ CI runs all of the above and bundles the app. It also compiles full native Andro
 ## Status
 
 Verified:
-- 30 automated tests across the engine, server and AI service.
-- End-to-end runs with real Whisper and Gemma models on spoken English and Spanish.
-- Native builds compile on both platforms.
+- 34 automated tests across the engine, server and AI service.
+- A fine-tuned model evaluated on a held-out set.
+- End-to-end runs with real Whisper and Gemma on spoken English and Spanish.
+- Native Android and iOS builds compile, including Bluetooth, llama.cpp and whisper.cpp.
 
-Not yet field-tested on real phones: push delivery, Bluetooth range and timing, background behaviour, and battery use over a full night. That's the next step.
+**Field testing is next.** The app and server are instrumented for it: opt-in battery and radio samples, plus a delivery-latency log. [`docs/FIELD_TEST.md`](docs/FIELD_TEST.md) turns one night out into a report with battery drain per hour, Bluetooth detection, and alert latency (p50/p95).
 
 ## Roadmap
 
 - Measure battery use on real phones over a full night, and tune the Bluetooth burst timings.
 - A Bluetooth-only foreground service on Android, so all-night scanning doesn't require live location. Distance hints from RSSI.
 - Native home-screen widget and watch complication for one-tap check-in.
-- On-device transcription (whisper.cpp) so voice notes never leave the phone.
+- Fine-tune v2 with real (consented) voice notes from noisy venues, and on-phone latency numbers.
 - Web link for SMS contacts to see the live incident without installing the app.
-- More eval data, including real (consented) recordings in noisy venues.
+- End-to-end encryption of locations and voice cards with a group key, so the server stores only ciphertext.
 
 ## License
 
