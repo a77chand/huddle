@@ -1,6 +1,7 @@
 """Score an extractor on the hand-written voice-note set.
 
-    python -m evals.run_eval                      # rules baseline
+    python -m evals.run_eval                      # rules baseline, dev set
+    python -m evals.run_eval --set test           # held-out test set (never used for tuning)
     LLM_BASE_URL=http://localhost:11434/v1 LLM_MODEL=gemma3:4b python -m evals.run_eval
 
 A field counts as correct when it is absent and expected absent, or present
@@ -22,7 +23,9 @@ from huddle_ai.llm import LLM
 
 def main() -> int:
     llm = LLM.from_env()
-    rows = [json.loads(l) for l in (Path(__file__).parent / "voice_notes.jsonl").read_text().splitlines() if l.strip()]
+    which = sys.argv[sys.argv.index("--set") + 1] if "--set" in sys.argv else "dev"
+    path = Path(__file__).parent / {"dev": "voice_notes.jsonl", "test": "test_notes.jsonl"}[which]
+    rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     stats = {f: {"tp": 0, "fp": 0, "fn": 0, "wrong": 0, "tn": 0} for f in FIELDS}
     dropped = 0
     fell_back = 0
@@ -50,7 +53,7 @@ def main() -> int:
                 misses.append(f"{r['id']}.{f}: {got.value!r} (want {want})")
 
     name = llm.model if llm else "rules"
-    print(f"extractor: {name}   notes: {len(rows)}   {time.time() - t0:.1f}s")
+    print(f"extractor: {name}   set: {which}   notes: {len(rows)}   {time.time() - t0:.1f}s ({(time.time() - t0) / len(rows):.2f}s/note)")
     print(f"{'field':20} {'correct':>8} {'invented':>9} {'missed':>7} {'wrong':>6}")
     tot = {"ok": 0, "fp": 0, "fn": 0, "wrong": 0}
     for f, s in stats.items():
