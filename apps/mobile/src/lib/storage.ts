@@ -14,6 +14,8 @@ export interface Profile {
   shareLiveLocation?: boolean;
   /** Transcribe and structure voice notes on this phone (models downloaded). */
   onDeviceAI?: boolean;
+  /** Upload battery and radio samples during huddles, for the field-test report. */
+  fieldTest?: boolean;
 }
 
 export interface Membership {

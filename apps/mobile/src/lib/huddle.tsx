@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import type { BoardRow, CheckInPolicy } from '@huddle/core';
 import { ApiError, client, OfflineError, type View } from './api';
 import { batteryLevel, cancelPrompts, currentFix, pushToken, requestNotificationPermission, schedulePrompts, setupNotifications } from './device';
+import { useFieldTest } from './fieldTest';
 import { useLiveLocation, type LiveLocationStatus } from './liveLocation';
 import { allInstalled, EXTRACTOR_NAME, processVoiceNote } from './ondevice';
 import { useProximity, type ProximityStatus } from './proximity';
@@ -208,6 +209,9 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     api: membership ? api : null,
   });
 
+  const proximityStatus = batterySaver && membership && profile?.shareProximity !== false ? 'paused-battery' : proximity;
+  useFieldTest({ enabled: Boolean(membership) && profile?.fieldTest === true, api: membership ? api : null, proximity: proximityStatus, liveLocation });
+
   const enter = useCallback(async (r: View & { token: string }) => {
     const m = { token: r.token, sessionId: r.board.sessionId, memberId: r.me };
     await storage.saveMembership(m);
@@ -223,7 +227,7 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     me,
     connection,
     pendingCheckIn,
-    proximity: batterySaver && membership && profile?.shareProximity !== false ? 'paused-battery' : proximity,
+    proximity: proximityStatus,
     liveLocation,
     batterySaver,
     onDeviceReady,

@@ -25,6 +25,7 @@ export default function Setup() {
   const [shareProximity, setShareProximity] = useState(p?.shareProximity !== false);
   const [shareLiveLocation, setShareLiveLocation] = useState(p?.shareLiveLocation === true);
   const [onDeviceAI, setOnDeviceAI] = useState(p?.onDeviceAI === true);
+  const [fieldTest, setFieldTest] = useState(p?.fieldTest === true);
   const [modelsReady, setModelsReady] = useState(() => allInstalled());
   const [progress, setProgress] = useState<number | null>(null);
   const modelMB = Math.round(MODELS.reduce((n, m) => n + m.bytes, 0) / 1e6);
@@ -62,6 +63,7 @@ export default function Setup() {
       shareProximity,
       shareLiveLocation,
       onDeviceAI: onDeviceAI && modelsReady,
+      fieldTest,
       policy: {
         intervalMin: +interval,
         graceMin: +grace,
@@ -188,6 +190,18 @@ export default function Setup() {
             disabled={progress !== null}
           />
         )}
+      </Card>
+
+      <Card>
+        <H size={18}>Field-test mode</H>
+        <P muted>
+          Helping test Huddle? Every 10 minutes your phone sends your group's server its battery level, whether it's charging, and whether Bluetooth and
+          live location are on. No location or audio. The organiser can then see real battery drain and alert timings.
+        </P>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: t.text, fontSize: 15, flex: 1 }}>Share test measurements</Text>
+          <Switch value={fieldTest} onValueChange={setFieldTest} />
+        </View>
       </Card>
 
       <P muted style={{ paddingHorizontal: 4 }}>

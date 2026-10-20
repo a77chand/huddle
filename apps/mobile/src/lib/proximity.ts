@@ -4,6 +4,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { digestToUuid, expectedTokens, HUDDLE_BLE_SERVICE, PROXIMITY_WINDOW_MS, proximityWindow, tokenMessage } from '@huddle/core/proximity';
 import Proximity, { type ProximityState } from '../../modules/huddle-proximity';
 import type { Client } from './api';
+import { countSighting } from './fieldTest';
 
 const FLUSH_EVERY_MS = 60_000;
 /** Scan in bursts: 10 s every 2 min is plenty for "last seen near". */
@@ -56,7 +57,10 @@ export function useProximity(opts: {
     const stateSub = radio.addListener('onState', (e) => setStatus(e.state));
     const seenSub = radio.addListener('onSighting', (s) => {
       const id = table.current.get(s.token);
-      if (id && id !== me) buffer.current.set(id, Math.max(buffer.current.get(id) ?? 0, s.at));
+      if (id && id !== me) {
+        buffer.current.set(id, Math.max(buffer.current.get(id) ?? 0, s.at));
+        countSighting();
+      }
     });
     (async () => {
       if (!(await androidPermissions())) return setStatus('denied');

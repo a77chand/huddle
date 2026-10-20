@@ -1,0 +1,35 @@
+# Deploy the Huddle server to Fly.io (run from the repo root):
+#   fly launch --copy-config --no-deploy   # pick a unique app name
+#   fly volumes create huddle_data --size 1
+#   fly secrets set TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM=...   # optional SMS
+#   fly deploy
+# Then set EXPO_PUBLIC_SERVER_URL in apps/mobile/eas.json to https://<app>.fly.dev
+app = "huddle-server"
+primary_region = "iad"
+
+[build]
+  dockerfile = "apps/server/Dockerfile"
+
+[env]
+  DATABASE_PATH = "/data/huddle.db"
+  PORT = "8787"
+
+[mounts]
+  source = "huddle_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Escalation runs on the server's clock, so it must never scale to zero.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
