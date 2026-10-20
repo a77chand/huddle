@@ -30,6 +30,13 @@ Fields:
 
 Reply with JSON only."""
 
+# Short prompt for models fine-tuned on finetune/generate.py data (no examples needed).
+FINETUNED_SYSTEM = (
+    "Extract what the speaker explicitly says in this voice note for their friends. "
+    "Fields: stated_location, requested_action, avoid, condition, contact_preference. "
+    "quote must be copied word-for-word from the note. Unsaid fields: said=false. Reply with JSON only."
+)
+
 # Small models ignore nullable unions in constrained decoding, so each field
 # carries an explicit "said" flag instead of being null.
 FIELD_SCHEMA = {
@@ -58,8 +65,9 @@ EXAMPLE2_OUT = {f: {"said": False, "value": "", "quote": ""} for f in FIELDS}
 
 
 class LLM:
-    def __init__(self, base_url: str, model: str, api_key: str | None = None, timeout: float = 20.0):
+    def __init__(self, base_url: str, model: str, api_key: str | None = None, timeout: float = 20.0, finetuned: bool = False):
         self.model = model
+        self.finetuned = finetuned
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout,
@@ -71,7 +79,12 @@ class LLM:
         url = os.environ.get("LLM_BASE_URL")
         if not url:
             return None
-        return cls(url, os.environ.get("LLM_MODEL", "gemma3:4b"), os.environ.get("LLM_API_KEY"))
+        return cls(
+            url,
+            os.environ.get("LLM_MODEL", "gemma3:4b"),
+            os.environ.get("LLM_API_KEY"),
+            finetuned=os.environ.get("LLM_PROMPT") == "finetuned",
+        )
 
     def extract(self, transcript: str) -> dict:
         res = self.client.post(
@@ -79,20 +92,26 @@ class LLM:
             json={
                 "model": self.model,
                 "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": EXAMPLE_IN},
-                    {"role": "assistant", "content": json.dumps(EXAMPLE_OUT)},
-                    {"role": "user", "content": EXAMPLE2_IN},
-                    {"role": "assistant", "content": json.dumps(EXAMPLE2_OUT)},
-                    {"role": "user", "content": transcript},
-                ],
+                "messages": self.messages(transcript),
                 "response_format": {"type": "json_schema", "json_schema": {"name": "card", "schema": SCHEMA, "strict": True}},
             },
         )
         res.raise_for_status()
         content = res.json()["choices"][0]["message"]["content"]
         return _parse(content)
+
+
+    def messages(self, transcript: str) -> list[dict]:
+        if self.finetuned:
+            return [{"role": "system", "content": FINETUNED_SYSTEM}, {"role": "user", "content": transcript}]
+        return [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": EXAMPLE_IN},
+            {"role": "assistant", "content": json.dumps(EXAMPLE_OUT)},
+            {"role": "user", "content": EXAMPLE2_IN},
+            {"role": "assistant", "content": json.dumps(EXAMPLE2_OUT)},
+            {"role": "user", "content": transcript},
+        ]
 
 
 def _parse(content: str) -> dict:

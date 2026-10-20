@@ -1,0 +1,32 @@
+# LoRA fine-tune on Apple Silicon with MLX (much faster than PyTorch/MPS here).
+#   pip install mlx-lm
+#   python -m finetune.generate --out finetune/data
+#   python -m mlx_lm lora --config finetune/mlx_lora.yaml
+#   python -m mlx_lm fuse --model Qwen/Qwen2.5-0.5B-Instruct --adapter-path finetune/out/adapters \
+#     --save-path finetune/out/huddle-extractor-0.5b --dequantize
+# On NVIDIA GPUs use finetune/train.py (PyTorch + PEFT) instead.
+model: Qwen/Qwen2.5-0.5B-Instruct
+train: true
+data: finetune/data
+fine_tune_type: lora
+mask_prompt: true          # loss on the JSON answer only
+num_layers: 24             # all transformer blocks
+batch_size: 8
+iters: 1000                # 2 epochs over 4,000 examples
+learning_rate: 5.0e-5
+lr_schedule:
+  name: cosine_decay
+  warmup: 50
+  arguments: [5.0e-5, 1000, 1.0e-6]
+lora_parameters:
+  keys: [self_attn.q_proj, self_attn.k_proj, self_attn.v_proj, self_attn.o_proj, mlp.gate_proj, mlp.up_proj, mlp.down_proj]
+  rank: 16
+  scale: 20.0
+  dropout: 0.05
+max_seq_length: 512
+steps_per_report: 50
+steps_per_eval: 200
+val_batches: 38            # all 300 validation examples
+save_every: 200
+adapter_path: finetune/out/adapters
+seed: 7

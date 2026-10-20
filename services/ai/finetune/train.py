@@ -71,8 +71,8 @@ def main() -> None:
     ap.add_argument("--out", default="finetune/out/qwen05b")
     ap.add_argument("--epochs", type=float, default=2)
     ap.add_argument("--lr", type=float, default=2e-4)
-    ap.add_argument("--batch", type=int, default=8)
-    ap.add_argument("--accum", type=int, default=2)
+    ap.add_argument("--batch", type=int, default=2)
+    ap.add_argument("--accum", type=int, default=8)
     ap.add_argument("--rank", type=int, default=16)
     ap.add_argument("--max-len", type=int, default=384)
     ap.add_argument("--seed", type=int, default=7)
@@ -83,7 +83,7 @@ def main() -> None:
     device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     tok = AutoTokenizer.from_pretrained(a.base)
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-    model = AutoModelForCausalLM.from_pretrained(a.base, torch_dtype=torch.float32).to(device)
+    model = AutoModelForCausalLM.from_pretrained(a.base, dtype=torch.float32).to(device)
     model = get_peft_model(
         model,
         LoraConfig(

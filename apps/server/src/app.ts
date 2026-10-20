@@ -192,6 +192,20 @@ export async function buildApp(opts: AppOptions) {
     return mutate(req, (s, me, t) => core.reportSightings(s, me, sightings, t));
   });
 
+  /**
+   * A card made on the phone (on-device Whisper + fine-tuned model). Re-grounded
+   * here with the same rule as the server's AI service: unquoted fields are dropped.
+   */
+  app.post('/v1/card', async (req) => {
+    const b = body(req);
+    const transcript = typeof b.transcript === 'string' ? b.transcript.slice(0, 2000) : '';
+    const fields = b.fields && typeof b.fields === 'object' ? (b.fields as Record<string, unknown>) : {};
+    const extractor = `on-device:${typeof b.extractor === 'string' ? b.extractor.slice(0, 60) : 'unknown'}`;
+    const preset = typeof b.presetStatus === 'string' ? b.presetStatus.slice(0, 120) : null;
+    const { card } = core.groundCard(transcript, fields as never, extractor, preset);
+    return mutate(req, (s, me, t) => core.attachCard(s, me, card, t));
+  });
+
   app.post('/v1/battery', async (req) => {
     const b = body(req);
     return mutate(req, (s, me, t) => core.reportBattery(s, me, num(b.level, 'level'), t, geo(b.location, t)));

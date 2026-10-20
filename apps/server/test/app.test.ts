@@ -188,6 +188,25 @@ test('live location endpoint', async () => {
   assert.equal((await t.call('POST', '/v1/location', t.cy, { location: { lat: 1, lng: 1 } })).status, 400);
 });
 
+test('on-device card is re-grounded by the server', async () => {
+  const t = await setup();
+  await t.call('POST', '/v1/sos', t.bea);
+  const r = await t.call('POST', '/v1/card', t.bea, {
+    transcript: "I'm by the coat check, don't come inside",
+    extractor: 'huddle-extractor-0.5b',
+    fields: {
+      stated_location: { said: true, value: 'coat check', quote: 'by the coat check' },
+      avoid: { said: true, value: 'come inside', quote: "don't come inside" },
+      requested_action: { said: true, value: 'call the police', quote: 'call the police' }, // not said: dropped
+    },
+  });
+  const card = r.json.board.rows.find((x: any) => x.name === 'Bea').card;
+  assert.equal(card.extractor, 'on-device:huddle-extractor-0.5b');
+  assert.equal(card.statedLocation.value, 'coat check');
+  assert.equal(card.avoid.value, 'come inside');
+  assert.equal(card.requestedAction, null);
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

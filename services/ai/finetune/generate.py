@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from huddle_ai.card import FIELDS
+from huddle_ai.llm import FINETUNED_SYSTEM
 
 # ---------------------------------------------------------------- phrase banks
 
@@ -259,11 +260,7 @@ def target(labels: dict) -> dict:
     return {f: ({"said": True, **labels[f]} if f in labels else {"said": False, "value": "", "quote": ""}) for f in FIELDS}
 
 
-SYSTEM = (
-    "Extract what the speaker explicitly says in this voice note for their friends. "
-    "Fields: stated_location, requested_action, avoid, condition, contact_preference. "
-    "quote must be copied word-for-word from the note. Unsaid fields: said=false. Reply with JSON only."
-)
+SYSTEM = FINETUNED_SYSTEM
 
 
 def example(r: random.Random) -> dict:
