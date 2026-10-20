@@ -45,11 +45,27 @@ export async function buildApp(opts: AppOptions) {
     return {
       me: memberId,
       joinCode: store.joinCode(session.id),
-      // Only members ever see this (every view is authenticated).
-      proximityKey: session.endedAt === null ? session.proximityKey : null,
+      // Only members ever see this (every view is authenticated). Encrypted huddles
+      // derive it from the group key instead, so the server can't know it.
+      proximityKey: session.endedAt === null && !session.e2e ? session.proximityKey : null,
+      keys: session.e2e ? keyState(session, memberId) : null,
       board: b,
       incidents: b.rows.filter((r) => r.needsAttention).map((r) => core.incident(session, r.id, t)!),
       timeline: session.timeline.slice(-50),
+    };
+  }
+
+  /** What this member needs for E2E: their wrapped keys, and who still needs the current key. */
+  function keyState(session: Session, memberId: string) {
+    const epoch = session.keyEpoch ?? 1;
+    const wrapped = store.wrappedMembers(session.id, epoch);
+    return {
+      epoch,
+      claimed: wrapped.size > 0,
+      mine: store.wrapsFor(session.id, memberId),
+      needWrap: session.members
+        .filter((m) => m.leftAt === null && m.publicKey && !wrapped.has(m.id))
+        .map((m) => ({ memberId: m.id, publicKey: m.publicKey! })),
     };
   }
 
@@ -118,7 +134,8 @@ export async function buildApp(opts: AppOptions) {
       durationHours: b.durationHours === undefined ? undefined : num(b.durationHours, 'durationHours'),
       timeZone: typeof b.timeZone === 'string' ? b.timeZone : undefined,
       proximityKey: randomBytes(16).toString('hex'),
-      founder: { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), policy: policy(b.policy) },
+      e2e: b.e2e === true,
+      founder: { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), publicKey: optKey(b.publicKey), policy: policy(b.policy) },
     });
     store.insert(session);
     const token = store.issueToken({ sessionId: session.id, memberId });
@@ -132,7 +149,11 @@ export async function buildApp(opts: AppOptions) {
     if (!found) throw new HttpError(404, 'no-session', 'no session with that code');
     const memberId = randomUUID();
     const session = commit(
-      core.join(found, { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), policy: policy(b.policy) }, now()),
+      core.join(
+        found,
+        { id: memberId, name: str(b.memberName, 'memberName', 40), phone: optStr(b.phone), publicKey: optKey(b.publicKey), policy: policy(b.policy) },
+        now(),
+      ),
     );
     const token = store.issueToken({ sessionId: session.id, memberId });
     return { token, ...view(session, memberId) };
@@ -146,7 +167,7 @@ export async function buildApp(opts: AppOptions) {
   app.post('/v1/check-in', async (req) => {
     const b = body(req);
     return mutate(req, (s, me, t) =>
-      core.checkIn(s, me, t, { location: geo(b.location, t), battery: b.battery === undefined ? undefined : num(b.battery, 'battery') }),
+      core.checkIn(s, me, t, { ...locations(b, t), battery: b.battery === undefined ? undefined : num(b.battery, 'battery') }),
     );
   });
 
@@ -155,14 +176,59 @@ export async function buildApp(opts: AppOptions) {
   app.post('/v1/sos', async (req) => {
     const b = body(req);
     return mutate(req, (s, me, t) =>
-      core.sos(s, me, t, { location: geo(b.location, t), status: typeof b.status === 'string' ? b.status : undefined }),
+      core.sos(s, me, t, {
+        ...locations(b, t),
+        status: typeof b.status === 'string' ? b.status : undefined,
+        sealedStatus: typeof b.sealedStatus === 'string' ? b.sealedStatus : undefined,
+      }),
     );
   });
 
   /** A preset status ("Call me", "Come find me") without a voice note. */
   app.post('/v1/status', async (req) => {
     const status = str(body(req).status, 'status', 120);
-    return mutate(req, (s, me, t) => core.attachCard(s, me, bareCard(status, 'preset'), t));
+    return mutate(req, (s, me, t) => {
+      if (s.e2e) throw new HttpError(400, 'encrypted', 'this huddle is encrypted; send the status sealed to /v1/card-sealed');
+      return core.attachCard(s, me, bareCard(status, 'preset'), t);
+    });
+  });
+
+  /** Encrypted huddles: a voice card or status sealed on the phone. The server can't read it. */
+  app.post('/v1/card-sealed', async (req) => {
+    const blob = str(body(req).blob, 'blob', 8192);
+    return mutate(req, (s, me, t) => core.attachSealedCard(s, me, blob, t));
+  });
+
+  /**
+   * Group keys sealed to members' public keys. The first upload for an epoch
+   * claims it (and must include the uploader); later uploads come from members
+   * who already hold that epoch, for people who joined since.
+   */
+  app.post('/v1/keys', async (req) => {
+    const a = authed(req);
+    const s = a.session;
+    if (!s.e2e) throw new HttpError(400, 'not-e2e', 'this huddle is not encrypted');
+    const b = body(req);
+    const epoch = num(b.epoch, 'epoch');
+    if (!Number.isInteger(epoch) || epoch < 1 || epoch > (s.keyEpoch ?? 1)) throw new HttpError(400, 'bad-epoch', 'unknown key epoch');
+    const list = Array.isArray(b.wraps) ? b.wraps.slice(0, 25) : [];
+    const wraps = list.map((x) => {
+      const w = (x ?? {}) as Record<string, unknown>;
+      const memberId = str(w.memberId, 'memberId', 64);
+      const blob = str(w.blob, 'blob', 512);
+      const m = s.members.find((x) => x.id === memberId);
+      if (!m || m.leftAt !== null || !m.publicKey) throw new HttpError(400, 'bad-member', 'wraps are only for current members');
+      if (!/^w1\.[A-Za-z0-9_-]+$/.test(blob)) throw new HttpError(400, 'bad-wrap', 'expected a wrapped key');
+      return { memberId, blob };
+    });
+    if (!wraps.length) throw new HttpError(400, 'bad-request', 'no wraps');
+    const holders = store.wrappedMembers(s.id, epoch);
+    if (holders.size === 0 && !wraps.some((w) => w.memberId === a.memberId))
+      throw new HttpError(400, 'claim-needs-self', 'the first upload for an epoch must include your own wrap');
+    if (holders.size > 0 && !holders.has(a.memberId)) throw new HttpError(403, 'not-holder', 'only members who hold this key can share it');
+    if (!store.putWraps(s.id, a.memberId, epoch, wraps)) throw new HttpError(409, 'already-wrapped', 'another phone already shared this key');
+    broadcast(s);
+    return view(s, a.memberId);
   });
 
   /**
@@ -171,6 +237,7 @@ export async function buildApp(opts: AppOptions) {
    */
   app.post('/v1/voice', async (req) => {
     const a = authed(req);
+    const ephemeral = (req.query as Record<string, string>).ephemeral === '1' || a.session.e2e === true;
     const audio = Buffer.isBuffer(req.body) ? req.body : null;
     if (!audio?.length) throw new HttpError(400, 'no-audio', 'send the recording as an audio/* body');
     const preset = typeof (req.query as Record<string, unknown>).preset_status === 'string'
@@ -183,6 +250,8 @@ export async function buildApp(opts: AppOptions) {
       log(`voice card failed: ${e instanceof Error ? e.message : e}`);
       card = bareCard(preset, 'ai-unavailable');
     }
+    // Encrypted huddles: return the card to the phone, which seals it. Nothing is stored here.
+    if (ephemeral) return { card };
     // Reload: the session may have changed while the model was running.
     const fresh = store.get(a.sessionId);
     if (!fresh) throw new HttpError(404, 'gone', 'this session no longer exists');
@@ -193,7 +262,7 @@ export async function buildApp(opts: AppOptions) {
   app.post('/v1/location', async (req) => {
     const b = body(req);
     if (typeof b.live !== 'boolean') throw new HttpError(400, 'bad-request', 'live must be true or false');
-    return mutate(req, (s, me, t) => core.shareLocation(s, me, { live: b.live as boolean, location: geo(b.location, t) }, t));
+    return mutate(req, (s, me, t) => core.shareLocation(s, me, { live: b.live as boolean, ...locations(b, t) }, t));
   });
 
   /** "My phone was near these friends' phones" — from Bluetooth, uploaded in batches. */
@@ -218,7 +287,10 @@ export async function buildApp(opts: AppOptions) {
     const extractor = `on-device:${typeof b.extractor === 'string' ? b.extractor.slice(0, 60) : 'unknown'}`;
     const preset = typeof b.presetStatus === 'string' ? b.presetStatus.slice(0, 120) : null;
     const { card } = core.groundCard(transcript, fields as never, extractor, preset);
-    return mutate(req, (s, me, t) => core.attachCard(s, me, card, t));
+    return mutate(req, (s, me, t) => {
+      if (s.e2e) throw new HttpError(400, 'encrypted', 'this huddle is encrypted; seal the card and use /v1/card-sealed');
+      return core.attachCard(s, me, card, t);
+    });
   });
 
   /** Opt-in field-test samples from the phone: battery and radio state. */
@@ -258,7 +330,7 @@ export async function buildApp(opts: AppOptions) {
 
   app.post('/v1/battery', async (req) => {
     const b = body(req);
-    return mutate(req, (s, me, t) => core.reportBattery(s, me, num(b.level, 'level'), t, geo(b.location, t)));
+    return mutate(req, (s, me, t) => core.reportBattery(s, me, num(b.level, 'level'), t, locations(b, t)));
   });
 
   for (const action of ['ack', 'escalate', 'resolve'] as const) {
@@ -343,6 +415,24 @@ function body(req: FastifyRequest): Record<string, unknown> {
 function str(v: unknown, name: string, max: number): string {
   if (typeof v !== 'string' || !v.trim()) throw new HttpError(400, 'bad-request', `${name} is required`);
   return v.trim().slice(0, max);
+}
+
+/** A plain location and/or a sealed one ({ blob, at }) from a request body. */
+function locations(b: Record<string, unknown>, t: number): core.LocationInput {
+  const out: core.LocationInput = { location: geo(b.location, t) };
+  const s = b.sealedLocation as { blob?: unknown; at?: unknown } | undefined;
+  if (s && typeof s === 'object') {
+    if (typeof s.blob !== 'string') throw new HttpError(400, 'bad-request', 'sealedLocation needs blob and at');
+    const at = typeof s.at === 'number' && s.at <= t + 60_000 && s.at > t - 6 * 3600_000 ? s.at : t;
+    out.sealedLocation = { blob: s.blob, at };
+  }
+  return out;
+}
+
+function optKey(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(v)) throw new HttpError(400, 'bad-key', 'publicKey must be a base64url X25519 key');
+  return v;
 }
 
 function optStr(v: unknown): string | undefined {

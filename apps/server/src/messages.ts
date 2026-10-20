@@ -34,7 +34,9 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
       if (memberIds.length)
         out.push({ channel: 'push', memberIds, title, body, urgency, data: { sessionId: session.id, memberId: m.id, kind: e.kind } });
     };
-    const where = m.lastLocation ? ` Last location ${clock.format(m.lastLocation.at)}.` : '';
+    // Only times go into push text; in encrypted huddles the server has nothing else to say.
+    const locAt = m.lastLocation?.at ?? m.sealedLocation?.at;
+    const where = locAt ? ` Last location ${clock.format(locAt)}.` : '';
     const near = lastNear(session, m.id);
     const nearText = near && near.at > m.lastCheckInAt ? ` Last near ${name(near.memberId)}'s phone ${clock.format(near.at)}.` : '';
 
@@ -51,7 +53,7 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
           push(others(m.id), `${e.reason === 'sos' ? '🚨' : 'Update:'} ${m.name} asked for help`, `${m.sos?.status ? `"${m.sos.status}". ` : ''}${where.trim() || 'No location shared.'}`, 'sos');
         break;
       case 'contacts-alert': {
-        const i = incident(session, m.id, now);
+        const i = incident(session, m.id, now, { forContacts: true });
         const to = m.policy.contacts.map((c) => c.phone);
         if (i && to.length) out.push({ channel: 'sms', to, body: incidentText(i, session.name), data: { sessionId: session.id, memberId: m.id, kind: e.kind } });
         break;
@@ -62,7 +64,10 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
         break;
       case 'card': {
         const c = m.card;
-        if (!c) break;
+        if (!c) {
+          if (m.sealedCard) push(others(m.id), `${m.name} sent details`, 'Open Huddle to read them (end-to-end encrypted).', m.sos ? 'sos' : 'alert');
+          break;
+        }
         const bits = [c.requestedAction?.value, c.avoid && `don't ${c.avoid.value}`, c.statedLocation?.value, c.presetStatus]
           .filter(Boolean)
           .join(' · ');

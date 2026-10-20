@@ -70,6 +70,16 @@ export class Store {
         app_state TEXT,
         sightings INTEGER
       );
+      -- E2E: the group key for each epoch, sealed to each member's public key.
+      -- The server stores these but can't open them.
+      CREATE TABLE IF NOT EXISTS key_wraps (
+        session_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        epoch INTEGER NOT NULL,
+        blob TEXT NOT NULL,
+        by_member TEXT NOT NULL,
+        PRIMARY KEY (session_id, member_id, epoch)
+      );
       CREATE TABLE IF NOT EXISTS push_tokens (
         session_id TEXT NOT NULL,
         member_id TEXT NOT NULL,
@@ -114,6 +124,37 @@ export class Store {
   joinCode(id: string): string | null {
     const row = this.db.prepare('SELECT join_code FROM sessions WHERE id = ?').get(id) as { join_code: string } | undefined;
     return row?.join_code ?? null;
+  }
+
+  /** Insert all wraps or none (a wrap that already exists means another phone got there first). */
+  putWraps(sessionId: string, by: string, epoch: number, wraps: { memberId: string; blob: string }[]): boolean {
+    const exists = this.db.prepare('SELECT 1 FROM key_wraps WHERE session_id = ? AND member_id = ? AND epoch = ?');
+    const insert = this.db.prepare('INSERT INTO key_wraps VALUES (?, ?, ?, ?, ?)');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if (wraps.some((w) => exists.get(sessionId, w.memberId, epoch))) {
+        this.db.exec('ROLLBACK');
+        return false;
+      }
+      for (const w of wraps) insert.run(sessionId, w.memberId, epoch, w.blob, by);
+      this.db.exec('COMMIT');
+      return true;
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
+  wrapsFor(sessionId: string, memberId: string): { epoch: number; blob: string }[] {
+    return this.db.prepare('SELECT epoch, blob FROM key_wraps WHERE session_id = ? AND member_id = ? ORDER BY epoch').all(sessionId, memberId) as {
+      epoch: number;
+      blob: string;
+    }[];
+  }
+
+  wrappedMembers(sessionId: string, epoch: number): Set<string> {
+    const rows = this.db.prepare('SELECT member_id FROM key_wraps WHERE session_id = ? AND epoch = ?').all(sessionId, epoch) as { member_id: string }[];
+    return new Set(rows.map((r) => r.member_id));
   }
 
   allSessionIds(): string[] {
@@ -170,6 +211,7 @@ export class Store {
     const ids = (this.db.prepare('SELECT id FROM sessions WHERE ends_at < ?').all(olderThan) as { id: string }[]).map((r) => r.id);
     for (const id of ids) {
       this.db.prepare('DELETE FROM deliveries WHERE session_id = ?').run(id);
+      this.db.prepare('DELETE FROM key_wraps WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM diagnostics WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM tokens WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM push_tokens WHERE session_id = ?').run(id);

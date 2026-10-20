@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import WebSocket from 'ws';
+import { randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { generateGroupKey, generateKeyPair, open, seal, unwrapKey, wrapKey } from '@huddle/core';
 import { bareCard, type CardMaker } from '../src/ai.ts';
 import { buildApp } from '../src/app.ts';
 import type { PushMessage } from '../src/messages.ts';
@@ -247,6 +250,101 @@ test('field-test report: delivery latency, battery drain, check-in responses', a
   const md = await t.app.inject({ method: 'GET', url: '/v1/report?format=md', headers: { authorization: `Bearer ${t.ana}` } });
   assert.match(md.body, /### Battery \(excluding time on charge\)/);
   assert.match(md.body, /\| Ana \| 2 h \| 5% \|/);
+});
+
+test('end-to-end encrypted huddle: key exchange, ciphertext at rest, contact-only escrow', async () => {
+  const rand = (n: number) => new Uint8Array(randomBytes(n));
+  const dbPath = `/tmp/huddle-e2e-${process.pid}-${Date.now()}.db`;
+  let clock = T0;
+  const sms: string[] = [];
+  const pushes: string[] = [];
+  const h = await buildApp({
+    store: new Store(dbPath),
+    sender: { push: async (_t, m) => void pushes.push(`${m.title} | ${m.body}`), sms: async (_to, body) => void sms.push(body) },
+    makeCard: async () => ({ ...bareCard(null, 'fake'), transcript: "I'm by the bar", statedLocation: { value: 'bar', quote: 'by the bar' } }),
+    now: () => clock,
+  });
+  const call = async (method: 'GET' | 'POST', url: string, token?: string, payload?: object) => {
+    const res = await h.app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload });
+    return { status: res.statusCode, json: res.json() };
+  };
+  const policy = { intervalMin: 20, graceMin: 10, escalateAfterMin: 15, contacts: [{ name: 'Mom', phone: '+14155550123' }] };
+  const anaKp = generateKeyPair(rand);
+  const cyKp = generateKeyPair(rand);
+  const evilKp = generateKeyPair(rand);
+
+  // Ana creates an encrypted huddle and claims epoch 1 with a key only phones know.
+  const created = await call('POST', '/v1/sessions', undefined, { name: 'Concert', memberName: 'Ana', e2e: true, publicKey: anaKp.publicKey, policy, timeZone: 'America/New_York' });
+  const ana = created.json.token;
+  const sid = created.json.board.sessionId;
+  assert.equal(created.json.proximityKey, null, 'server-known proximity key is withheld');
+  assert.deepEqual(created.json.keys.needWrap.map((x: any) => x.memberId), [created.json.me]);
+  const groupKey = generateGroupKey(rand);
+  const claim = await call('POST', '/v1/keys', ana, { epoch: 1, wraps: [{ memberId: created.json.me, blob: wrapKey(groupKey, anaKp.publicKey, 1, rand) }] });
+  assert.equal(claim.status, 200);
+  assert.equal(claim.json.keys.claimed, true);
+
+  // Old clients can't join an encrypted huddle; Cy joins with a public key and waits for a wrap.
+  assert.equal((await call('POST', '/v1/join', undefined, { joinCode: created.json.joinCode, memberName: 'Old' })).json.error, 'needs-key');
+  const joined = await call('POST', '/v1/join', undefined, { joinCode: created.json.joinCode, memberName: 'Cy', publicKey: cyKp.publicKey, policy });
+  const cy = joined.json.token;
+  const cyId = joined.json.me;
+  assert.deepEqual(joined.json.keys.mine, []);
+  // Cy can't claim an already-claimed epoch, and can't wrap before holding the key.
+  assert.equal((await call('POST', '/v1/keys', cy, { epoch: 1, wraps: [{ memberId: cyId, blob: wrapKey(generateGroupKey(rand), cyKp.publicKey, 1, rand) }] })).status, 403);
+  // Ana's phone sees Cy needs the key and wraps it.
+  const anaView = (await call('GET', '/v1/session', ana)).json;
+  assert.deepEqual(anaView.keys.needWrap, [{ memberId: cyId, publicKey: cyKp.publicKey }]);
+  await call('POST', '/v1/keys', ana, { epoch: 1, wraps: [{ memberId: cyId, blob: wrapKey(groupKey, cyKp.publicKey, 1, rand) }] });
+  assert.equal((await call('POST', '/v1/keys', ana, { epoch: 1, wraps: [{ memberId: cyId, blob: wrapKey(groupKey, cyKp.publicKey, 1, rand) }] })).status, 409);
+  const cyKeys = (await call('GET', '/v1/session', cy)).json.keys.mine;
+  assert.equal(unwrapKey(cyKeys[0].blob, cyKp, 1), groupKey, 'Cy recovered the group key the server never saw');
+  assert.throws(() => unwrapKey(cyKeys[0].blob, evilKp, 1));
+
+  for (const [tok, n] of [[ana, 'A'], [cy, 'C']] as const)
+    await h.app.inject({ method: 'PUT', url: '/v1/push-token', headers: { authorization: `Bearer ${tok}` }, payload: { token: `ExponentPushToken[${n}]` } });
+
+  // Cy checks in with a sealed location only: no plaintext anywhere on the server.
+  const fix = { lat: 40.75051, lng: -73.99341, at: T0 };
+  const sealedLocation = { blob: seal(fix, { sessionId: sid, memberId: cyId, field: 'location', epoch: 1, key: groupKey }, rand), at: T0 };
+  await call('POST', '/v1/check-in', cy, { sealedLocation });
+  const raw = () => JSON.stringify(new DatabaseSync(dbPath).prepare('SELECT data FROM sessions').all());
+  assert.ok(!raw().includes('40.750'), 'database holds ciphertext only');
+  const row = (await call('GET', '/v1/session', ana)).json.board.rows.find((r: any) => r.id === cyId);
+  assert.deepEqual(open(row.sealedLocation.blob, { sessionId: sid, memberId: cyId, field: 'location', keys: new Map([[1, groupKey]]) }), fix);
+  assert.equal(row.lastLocation, null);
+
+  // Plaintext statuses and cards are refused; server AI returns the card without storing it.
+  assert.equal((await call('POST', '/v1/status', cy, { status: 'Call me' })).json.error, 'encrypted');
+  assert.equal((await call('POST', '/v1/card', cy, { transcript: 'x', fields: {} })).json.error, 'encrypted');
+  const voice = await h.app.inject({ method: 'POST', url: '/v1/voice', headers: { authorization: `Bearer ${cy}`, 'content-type': 'audio/wav' }, payload: Buffer.from('x') });
+  assert.equal(voice.json().card.statedLocation.value, 'bar');
+  assert.ok(!raw().includes('by the bar'), 'server-side AI result was not stored');
+
+  // Cy goes quiet; contacts are texted without a location (none escrowed), pushes carry only times.
+  clock += 60 * MIN;
+  h.runDue();
+  await h.idle();
+  const cyText = sms.find((b) => b.includes('Cy missed a check-in'))!;
+  assert.match(cyText, /A location was shared at 11:00 PM .*end-to-end encrypted, ask their friends in the huddle/);
+  assert.ok(!cyText.includes('maps.google'), 'no location for contacts unless Cy allowed it');
+  assert.ok(pushes.some((p) => p.startsWith('Cy missed a check-in') && p.includes('Last location 11:00 PM') && !p.includes('40.75')));
+
+  // With escrow (Cy allowed it), the next contact text includes the map link.
+  await call('POST', '/v1/check-in', cy, { sealedLocation, location: fix });
+  clock += 60 * MIN;
+  sms.length = 0;
+  h.runDue();
+  await h.idle();
+  assert.ok(sms.some((b) => b.includes('maps.google.com/?q=40.75051')));
+
+  // Cy leaves: a new epoch starts, unclaimed until a remaining phone shares a fresh key.
+  await call('POST', '/v1/leave', cy);
+  const after = (await call('GET', '/v1/session', ana)).json.keys;
+  assert.equal(after.epoch, 2);
+  assert.equal(after.claimed, false);
+  assert.deepEqual(after.needWrap.map((x: any) => x.memberId), [created.json.me]);
+  await h.app.close();
 });
 
 test('auth, validation and join-code errors', async () => {

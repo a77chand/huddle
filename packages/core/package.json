@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./proximity": "./src/proximity.ts",
-    "./grounding": "./src/grounding.ts"
+    "./grounding": "./src/grounding.ts",
+    "./e2e": "./src/e2e.ts"
   },
   "scripts": {
     "test": "node --test 'test/*.test.ts'",
@@ -15,5 +16,10 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
   }
 }

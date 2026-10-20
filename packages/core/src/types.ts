@@ -56,6 +56,12 @@ export interface AlertCard {
   extractor: string;
 }
 
+/** A value encrypted for the group (see e2e.ts), with the plaintext time it refers to. */
+export interface Sealed {
+  blob: string;
+  at: Millis;
+}
+
 export interface Responder {
   memberId: string;
   at: Millis;
@@ -74,7 +80,7 @@ export interface Member {
   battery: { level: number; at: Millis } | null;
   stage: Stage;
   stageSince: Millis;
-  sos: { at: Millis; status: string | null } | null;
+  sos: { at: Millis; status: string | null; sealedStatus?: string | null } | null;
   /** Latest voice note / status card, kept until the member is resolved. */
   card: AlertCard | null;
   responders: Responder[];
@@ -85,6 +91,16 @@ export interface Member {
   seenNear: Record<string, Millis>;
   /** Opted in to continuous (low-power) location sharing; since when. */
   liveLocationSince: Millis | null;
+  /** X25519 public key (encrypted huddles). */
+  publicKey?: string | null;
+  /** Encrypted huddles: the group-encrypted latest location and voice card. */
+  sealedLocation?: Sealed | null;
+  sealedCard?: Sealed | null;
+  /**
+   * Encrypted huddles: latest location the member allowed the server to read,
+   * used only for emergency texts to their contacts. Never shown on the board.
+   */
+  contactLocation?: GeoFix | null;
   leftAt: Millis | null;
 }
 
@@ -123,6 +139,10 @@ export interface Session {
    * so strangers can't recognise or track anyone. Never sent to the server's logs.
    */
   proximityKey: string;
+  /** End-to-end encrypted: the server stores only ciphertext for locations, cards and statuses. */
+  e2e?: boolean;
+  /** Current group-key epoch; advances when someone leaves so they can't read new data. */
+  keyEpoch?: number;
   createdAt: Millis;
   endsAt: Millis;
   endedAt: Millis | null;

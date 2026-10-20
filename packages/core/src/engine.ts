@@ -6,6 +6,7 @@ import type {
   Member,
   Millis,
   Result,
+  Sealed,
   Session,
   Stage,
   TimelineEntry,
@@ -64,7 +65,8 @@ export function createSession(opts: {
   timeZone?: string;
   /** 32 hex chars of randomness from the host (the engine stays deterministic). */
   proximityKey: string;
-  founder: { id: string; name: string; phone?: string; policy?: CheckInPolicy };
+  e2e?: boolean;
+  founder: { id: string; name: string; phone?: string; publicKey?: string; policy?: CheckInPolicy };
 }): Result {
   const hours = opts.durationHours ?? 12;
   if (!(hours > 0 && hours <= 48)) throw new HuddleError('bad-duration', 'durationHours must be 0..48');
@@ -73,6 +75,8 @@ export function createSession(opts: {
     name: opts.name.slice(0, 80),
     timeZone: validZone(opts.timeZone),
     proximityKey: opts.proximityKey,
+    e2e: opts.e2e === true,
+    keyEpoch: opts.e2e ? 1 : 0,
     createdAt: opts.now,
     endsAt: opts.now + hours * 60 * MIN,
     endedAt: null,
@@ -84,7 +88,7 @@ export function createSession(opts: {
 
 export function join(
   session: Session,
-  m: { id: string; name: string; phone?: string; policy?: CheckInPolicy },
+  m: { id: string; name: string; phone?: string; publicKey?: string; policy?: CheckInPolicy },
   now: Millis,
 ): Result {
   const s = open(session);
@@ -93,6 +97,8 @@ export function join(
     throw new HuddleError('full', 'a session holds at most 20 people');
   const policy = validatePolicy(m.policy ?? DEFAULT_POLICY);
   if (m.phone && !E164.test(m.phone)) throw new HuddleError('bad-phone', 'phone must be E.164, like +14155550123');
+  if (s.e2e && !(m.publicKey && /^[A-Za-z0-9_-]{43}$/.test(m.publicKey)))
+    throw new HuddleError('needs-key', 'this huddle is encrypted; update the app to join');
   s.members.push({
     id: m.id,
     name: m.name.slice(0, 40),
@@ -112,6 +118,10 @@ export function join(
     contactsAlertedAt: null,
     seenNear: {},
     liveLocationSince: null,
+    publicKey: m.publicKey ?? null,
+    sealedLocation: null,
+    sealedCard: null,
+    contactLocation: null,
     leftAt: null,
   });
   log(s, { at: now, kind: 'joined', memberId: m.id });
@@ -123,7 +133,7 @@ export function checkIn(
   session: Session,
   memberId: string,
   now: Millis,
-  extra: { location?: GeoFix; battery?: number } = {},
+  extra: LocationInput & { battery?: number } = {},
 ): Result {
   const s = open(session);
   const m = active(s, memberId);
@@ -132,11 +142,12 @@ export function checkIn(
   m.lastCheckInAt = now;
   m.nextDueAt = now + m.policy.intervalMin * MIN;
   setStage(m, 'ok', now);
-  if (extra.location) m.lastLocation = extra.location;
+  applyLocation(s, m, extra);
   log(s, { at: now, kind: 'check-in', memberId });
   if (wasAlerted && !m.sos) {
     m.responders = [];
     m.card = null;
+    m.sealedCard = null;
     effects.push(allClear(m, memberId));
   }
   if (extra.battery !== undefined) effects.push(...battery(s, m, extra.battery, now));
@@ -160,18 +171,21 @@ export function sos(
   session: Session,
   memberId: string,
   now: Millis,
-  extra: { location?: GeoFix; status?: string } = {},
+  extra: LocationInput & { status?: string; sealedStatus?: string } = {},
 ): Result {
   const s = open(session);
   const m = active(s, memberId);
-  if (extra.location) m.lastLocation = extra.location;
-  const status = extra.status?.slice(0, 120) ?? null;
+  applyLocation(s, m, extra);
+  // Encrypted huddles never keep a plaintext status, even if a client sends one.
+  const status = s.e2e ? null : (extra.status?.slice(0, 120) ?? null);
+  const sealedStatus = extra.sealedStatus ? checkSealed(extra.sealedStatus) : null;
   log(s, { at: now, kind: 'sos', memberId, detail: status ?? undefined });
   if (m.sos) {
     m.sos.status = status ?? m.sos.status;
+    m.sos.sealedStatus = sealedStatus ?? m.sos.sealedStatus ?? null;
     return { session: s, effects: [{ kind: 'group-alert', memberId, reason: 'sos-update' }] };
   }
-  m.sos = { at: now, status };
+  m.sos = { at: now, status, sealedStatus };
   const effects: Effect[] = [{ kind: 'group-alert', memberId, reason: 'sos' }];
   if (m.policy.sosNotifiesContacts && m.policy.contacts.length > 0) {
     m.contactsAlertedAt = now;
@@ -186,6 +200,16 @@ export function attachCard(session: Session, memberId: string, card: AlertCard, 
   const m = active(s, memberId);
   m.card = card;
   log(s, { at: now, kind: 'card', memberId, detail: card.requestedAction?.value ?? card.presetStatus ?? undefined });
+  return { session: s, effects: [{ kind: 'card', memberId }] };
+}
+
+/** Encrypted huddles: attach a voice card that only members can decrypt. */
+export function attachSealedCard(session: Session, memberId: string, blob: string, now: Millis): Result {
+  const s = open(session);
+  const m = active(s, memberId);
+  if (!s.e2e) throw new HuddleError('not-e2e', 'this huddle is not encrypted');
+  m.sealedCard = { blob: checkSealed(blob), at: now };
+  log(s, { at: now, kind: 'card', memberId });
   return { session: s, effects: [{ kind: 'card', memberId }] };
 }
 
@@ -223,6 +247,7 @@ export function resolve(session: Session, byId: string, targetId: string, now: M
   if (!needsAttention(t) && t.stage === 'ok') return { session: s, effects: [] };
   t.sos = null;
   t.card = null;
+  t.sealedCard = null;
   t.responders = [];
   t.lastCheckInAt = now;
   t.nextDueAt = now + t.policy.intervalMin * MIN;
@@ -231,10 +256,10 @@ export function resolve(session: Session, byId: string, targetId: string, now: M
   return { session: s, effects: [allClear(t, byId)] };
 }
 
-export function reportBattery(session: Session, memberId: string, level: number, now: Millis, location?: GeoFix): Result {
+export function reportBattery(session: Session, memberId: string, level: number, now: Millis, loc: LocationInput = {}): Result {
   const s = open(session);
   const m = active(s, memberId);
-  if (location) m.lastLocation = location;
+  applyLocation(s, m, loc);
   return { session: s, effects: battery(s, m, level, now) };
 }
 
@@ -272,12 +297,12 @@ export function reportSightings(
 export function shareLocation(
   session: Session,
   memberId: string,
-  update: { live: boolean; location?: GeoFix },
+  update: LocationInput & { live: boolean },
   now: Millis,
 ): Result {
   const s = open(session);
   const m = active(s, memberId);
-  if (update.location && (!m.lastLocation || update.location.at >= m.lastLocation.at)) m.lastLocation = update.location;
+  applyLocation(s, m, update);
   m.liveLocationSince = update.live ? (m.liveLocationSince ?? now) : null;
   return { session: s, effects: [] };
 }
@@ -302,8 +327,10 @@ export function leave(session: Session, memberId: string, now: Millis): Result {
   const s = open(session);
   const m = active(s, memberId);
   m.leftAt = now;
-  m.lastLocation = null;
+  wipeLocations(m);
   m.liveLocationSince = null;
+  // New epoch: the person who left can't read anything shared from now on.
+  if (s.e2e) s.keyEpoch = (s.keyEpoch ?? 1) + 1;
   log(s, { at: now, kind: 'left', memberId });
   return { session: s, effects: [{ kind: 'left', memberId }] };
 }
@@ -318,7 +345,7 @@ export function tick(session: Session, now: Millis): Result {
   if (s.endedAt !== null) return { session: s, effects };
   if (now >= s.endsAt) {
     s.endedAt = now;
-    for (const m of s.members) m.lastLocation = null;
+    for (const m of s.members) wipeLocations(m);
     log(s, { at: now, kind: 'ended', memberId: '' });
     return { session: s, effects };
   }
@@ -390,6 +417,42 @@ export function nextWakeAt(session: Session): Millis | null {
 
 export function needsAttention(m: Member): boolean {
   return m.leftAt === null && (m.sos !== null || isGroupAlerted(m.stage) || m.lowBatteryAlerted);
+}
+
+export interface LocationInput {
+  location?: GeoFix;
+  sealedLocation?: Sealed;
+}
+
+/**
+ * Where a location goes. Unencrypted huddles: the shared position. Encrypted
+ * huddles: the sealed copy is the group's; a plaintext copy (only sent if the
+ * member allows it) is kept solely for emergency texts to their contacts.
+ */
+function applyLocation(s: Session, m: Member, input: LocationInput) {
+  const newer = (cur: { at: Millis } | null | undefined, next: { at: Millis }) => !cur || next.at >= cur.at;
+  if (input.sealedLocation) {
+    if (!s.e2e) throw new HuddleError('not-e2e', 'this huddle is not encrypted');
+    const sealed = { blob: checkSealed(input.sealedLocation.blob), at: input.sealedLocation.at };
+    if (newer(m.sealedLocation, sealed)) m.sealedLocation = sealed;
+  }
+  if (input.location) {
+    if (s.e2e) {
+      if (newer(m.contactLocation, input.location)) m.contactLocation = input.location;
+    } else if (newer(m.lastLocation, input.location)) m.lastLocation = input.location;
+  }
+}
+
+function wipeLocations(m: Member) {
+  m.lastLocation = null;
+  m.sealedLocation = null;
+  m.contactLocation = null;
+}
+
+function checkSealed(blob: string): string {
+  if (typeof blob !== 'string' || blob.length > 8192 || !/^e1\.\d+\.[A-Za-z0-9_-]+$/.test(blob))
+    throw new HuddleError('bad-sealed', 'expected an encrypted value');
+  return blob;
 }
 
 function allClear(m: Member, byId: string): Effect {
