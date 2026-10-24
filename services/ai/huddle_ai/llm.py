@@ -7,6 +7,7 @@ LM Studio — so the model is a deployment choice, not a code change.
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import httpx
@@ -107,6 +108,8 @@ class LLM:
         )
         res.raise_for_status()
         content = res.json()["choices"][0]["message"]["content"]
+        if self.constrain:
+            _warn_if_reordered(content, self.model)
         return _parse(content)
 
 
@@ -121,6 +124,30 @@ class LLM:
             {"role": "assistant", "content": json.dumps(EXAMPLE2_OUT)},
             {"role": "user", "content": transcript},
         ]
+
+
+_warned: set[str] = set()
+
+
+def key_order(content: str) -> list[str]:
+    """Top-level keys in the order the model wrote them."""
+    try:
+        pairs = json.loads(content[content.find("{") : content.rfind("}") + 1], object_pairs_hook=lambda kv: kv)
+    except ValueError:
+        return []
+    return [k for k, _ in pairs] if isinstance(pairs, list) else []
+
+
+def _warn_if_reordered(content: str, model: str) -> None:
+    """Some engines turn the schema into a grammar with keys sorted alphabetically (Ollama did for an
+    imported GGUF, not for its native Gemma). That forces the model to write the quote before deciding
+    anything was said and cost 5.5 to 21.5 points in evals. Warn once per model so it's noticed."""
+    order = key_order(content)
+    if order and order != list(FIELDS) and model not in _warned:
+        _warned.add(model)
+        logging.getLogger("huddle_ai").warning(
+            "engine reordered JSON keys for %s (%s); constrained decoding will hurt accuracy. Set LLM_CONSTRAIN=0.", model, order
+        )
 
 
 def _parse(content: str) -> dict:

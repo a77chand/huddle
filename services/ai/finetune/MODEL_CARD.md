@@ -39,7 +39,8 @@ The **held-out test set** ([`evals/test_notes.jsonl`](../evals/test_notes.jsonl)
 **Findings worth knowing**
 
 - At about 1/8 the download size of Gemma 3 4B, it scores within noise of it on unseen notes.
-- **Don't use grammar-constrained decoding with this model.** With the JSON schema enforced, the same weights scored 78% instead of 83.5%. The fine-tune already emits the schema, and forced tokens pushed it off the exact quoting it learned.
+- **Constrained decoding is fine *if the engine keeps the key order*.** Through Ollama it scored 78% instead of 83.5%, because Ollama's schema-to-grammar step sorted this imported model's keys alphabetically. That made it write `quote` before `said` and `value`, so it had to copy a quote before deciding anything was said. On llama.cpp, which keeps schema order, constrained and unconstrained both scored 83.5%, and forcing alphabetical order reproduced the 78%. Gemma 3 4B is hit even harder by the same reordering: 84.0% falls to 62.5%, with 40 invented fields. If you serve it through Ollama, set `LLM_CONSTRAIN=0`. The AI service logs a warning when it sees reordered keys.
+- On llama.cpp with ggml-org's standard GGUF, Gemma 3 4B scores **84.0%** on the held-out set vs **83.5%** for this model (Q4): within noise, at about 1/6 the file size.
 - 4-bit quantization cost little: f16 and Q8 scored the same through the same serving path.
 - It fills more fields Gemma left empty (12 vs 6 on the test set), mostly a destination ("come to the cafe") read as the speaker's location. Grounding means each one still quotes the speaker's real words.
 - Scores include the **value check**: a value may only contain words from its quote. Gemma paraphrases more (10 of its values were replaced by their quotes, half of them English translations of non-English notes), so it scores 1.5 points lower than without the check. The fine-tune had 4 replaced.

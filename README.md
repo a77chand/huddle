@@ -114,7 +114,15 @@ On-device mode is opt-in (one-time download on Wi-Fi). The recording never leave
 | **huddle-extractor-0.5b Q4** (phone default) | **398 MB** | **83.5%** | 1.6 s/note |
 
 Two findings from the experiments:
-- **Grammar-constrained JSON decoding hurt the fine-tune** (78% vs 83.5%), because the model already emits the schema. So it runs unconstrained, with grounding as the safety net.
+- **Constrained decoding isn't the problem; key order is.** Through Ollama, grammar-constrained JSON scored 78% vs 83.5% unconstrained. The raw outputs showed why: for the imported fine-tune, Ollama's schema-to-grammar step sorted the keys alphabetically. That forced the model to write `"quote"` before `"said"` and `"value"`, so it had to copy a quote before deciding anything was said. (Ollama kept the order for its native Gemma.) On llama.cpp, which preserves schema order, the same weights scored the same constrained or not:
+
+  | Same weights on llama.cpp | Fine-tune 0.5B | Gemma 3 4B |
+  |---|---|---|
+  | Unconstrained | 83.5% | 84.0% |
+  | Constrained, trained key order | 83.5% | 84.0% |
+  | Constrained, alphabetical order | 78.0% | **62.5%** (40 invented fields) |
+
+  So the phone runs unconstrained, the AI service warns if an engine reorders keys, and a test pins the schema to the training order.
 - **4-bit quantization cost almost nothing:** f16 and Q8 scored the same through the same serving path.
 
 Scores are after grounding, including the value check: Gemma had 10 values that went beyond their quotes (5 English translations of non-English quotes, 1 resolved pronoun, 4 genuinely unsupported), so it lost 1.5 points. The fine-tune had 4. The fine-tune fills more fields Gemma left empty (12 vs 6), mostly a destination read as the speaker's location, but each one still quotes the speaker's real words. Reproduce any row with `python -m evals.run_eval --set test -v`.

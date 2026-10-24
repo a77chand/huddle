@@ -100,3 +100,27 @@ def test_grounding_matches_shared_cases():
         assert outcome == c["expect"], f"{c['why']}: expected {c['expect']}, got {outcome}"
         if outcome == "rewritten":
             assert got.value == c["quote"], "an unsupported value is replaced by the speaker's words"
+
+
+def test_decoding_schema_keeps_the_trained_key_order():
+    """A grammar that reorders keys (e.g. alphabetically, as Ollama does) cost the fine-tune
+    5.5 points: it had to write the quote before deciding anything was said. The schema and the
+    training targets must list fields and properties in the same order."""
+    import json
+
+    from finetune.generate import target
+    from huddle_ai.llm import EXAMPLE_OUT, SCHEMA
+
+    trained = json.loads(json.dumps(target({"avoid": {"value": "call", "quote": "don't call"}})))
+    assert list(SCHEMA["properties"]) == list(trained)
+    for field, spec in SCHEMA["properties"].items():
+        assert list(spec["properties"]) == list(trained[field]) == ["said", "value", "quote"], field
+    assert list(EXAMPLE_OUT) == list(trained), "few-shot example must use the same order"
+
+
+def test_reordered_keys_are_detected(caplog):
+    from huddle_ai.llm import _warn_if_reordered, key_order
+
+    assert key_order('{"stated_location": {}, "requested_action": {}}') == ["stated_location", "requested_action"]
+    _warn_if_reordered('{"avoid": {}, "condition": {}, "contact_preference": {}, "requested_action": {}, "stated_location": {}}', "probe-model")
+    assert "reordered JSON keys for probe-model" in caplog.text
