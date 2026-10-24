@@ -81,7 +81,7 @@ A night out is long and people want their phones alive at 2 AM, so Huddle is bui
 These are design choices, not measurements yet. Real-device battery numbers will go here after field testing.
 
 On privacy:
-- **End-to-end encryption.** Each phone has an X25519 key pair. The group shares a key the server never sees (passed between phones sealed to each member's public key), and it rotates when someone leaves. Locations, cards and statuses are encrypted with XChaCha20-Poly1305 and bound to their huddle, member and field. The one deliberate exception is emergency texts to contacts outside the app; see [SECURITY.md](docs/SECURITY.md) for that and the full threat model.
+- **End-to-end encryption.** Each phone has an X25519 key pair. The group shares a key the server never sees (passed between phones sealed to each member's public key), and it rotates when someone leaves. Someone who leaves loses access immediately: their token stops working, their live feed is closed, and anything encrypted under the old key is refused. Locations, cards and statuses are encrypted with XChaCha20-Poly1305 and bound to their huddle, member and field. The one deliberate exception is emergency texts to contacts outside the app; see [SECURITY.md](docs/SECURITY.md) for that and the full threat model.
 - Leaving a session wipes your location.
 - Sessions end automatically, and ended sessions are deleted after 24 h.
 - Only hashes of access tokens are stored.
@@ -113,6 +113,8 @@ On-device mode is opt-in (one-time download on Wi-Fi). The recording never leave
 | **huddle-extractor-0.5b Q8** | **531 MB** | **84.5%** | 1.9 s/note |
 | **huddle-extractor-0.5b Q4** (phone default) | **398 MB** | **83.5%** | 1.6 s/note |
 
+The fine-tune is **within noise of Gemma 3 4B** on unseen notes, at a fraction of the size (on llama.cpp with ggml-org's standard GGUF, Gemma scores 84.0%). That's what makes it practical on a phone. The test set is 40 notes (200 field decisions), so a point or two either way isn't meaningful.
+
 Two findings from the experiments:
 - **Constrained decoding isn't the problem; key order is.** Through Ollama, grammar-constrained JSON scored 78% vs 83.5% unconstrained. The raw outputs showed why: for the imported fine-tune, Ollama's schema-to-grammar step sorted the keys alphabetically. That forced the model to write `"quote"` before `"said"` and `"value"`, so it had to copy a quote before deciding anything was said. (Ollama kept the order for its native Gemma.) On llama.cpp, which preserves schema order, the same weights scored the same constrained or not:
 
@@ -138,6 +140,8 @@ apps/server                      Node + Fastify + SQLite: sessions, escalation c
 packages/core                    Pure TypeScript escalation engine, shared by server and app
 services/ai                      Python: Whisper speech-to-text + open-weight LLM grounded extraction
 services/ai/finetune             Dataset generator, LoRA training (MLX / PyTorch), model card
+fixtures/                        Grounding cases shared by the Python and TypeScript tests
+docs/SECURITY.md                 Encryption design and threat model
 docs/FIELD_TEST.md               How to measure battery, Bluetooth and alert latency on a real night
 ```
 
@@ -165,6 +169,8 @@ python -m venv .venv && .venv/bin/pip install -e ".[speech,dev]"
 ollama pull gemma3:4b
 LLM_BASE_URL=http://localhost:11434/v1 LLM_MODEL=gemma3:4b .venv/bin/uvicorn huddle_ai.app:app --port 8790
 # then start the server with AI_URL=http://localhost:8790
+# For the fine-tuned model via Ollama, add LLM_MODEL=huddle-extractor:0.5b-q4 LLM_PROMPT=finetuned LLM_CONSTRAIN=0
+# (see the model card: Ollama reorders JSON keys for imported models)
 ```
 
 **App:**
@@ -192,9 +198,9 @@ The app handles `huddle://sos` (3-second cancellable countdown, then alert) and 
 ## Tests
 
 ```bash
-npm test                                   # engine + server end-to-end (fake clock, fake push/SMS)
+npm test                                   # engine, encryption protocol, server end-to-end (fake clock, fake push/SMS)
 npm run typecheck
-cd services/ai && .venv/bin/pytest -q      # grounding, fallback, API
+cd services/ai && .venv/bin/pytest -q      # grounding, fallback, API, schema key order
 ```
 
 CI runs all of the above and bundles the app. It also compiles full native Android (Gradle) and iOS (Xcode) builds, including the Bluetooth module, and builds and boots the Docker images.
@@ -202,10 +208,18 @@ CI runs all of the above and bundles the app. It also compiles full native Andro
 ## Status
 
 Verified:
-- 42 automated tests across the engine, server and AI service, including the encryption protocol with three simulated phones (key exchange, leave and re-key race).
-- A fine-tuned model evaluated on a held-out set.
+- 47 automated tests across the engine, server and AI service. They include the encryption protocol run by three simulated phones (key exchange, someone leaving, two phones racing to re-key).
+- A fine-tuned model evaluated on a held-out set, with every number reproducible from one command.
 - End-to-end runs with real Whisper and Gemma on spoken English and Spanish.
 - Native Android and iOS builds compile, including Bluetooth, llama.cpp and whisper.cpp.
+
+### What adversarial testing caught
+
+The hardest parts were probed by trying to break them. Each find is now a regression test:
+
+- **A member who left could still read the board.** The encryption was sound, but the server accepted their token and kept their live WebSocket open. And a friend's background location upload, sent before their phone had the new key, could still be locked with the old one. Fixed: leavers are refused and disconnected, and old-key ciphertext is rejected.
+- **Grounding checked the quote but not the value.** A model could show "call the police" next to the real words "please call me". Fixed: a value may only contain words from its quote, or the speaker's own words are shown instead.
+- **"Constrained decoding hurts" was the wrong diagnosis.** Raw outputs showed Ollama alphabetizing the JSON keys for the imported model, so it had to write the quote before deciding anything was said. In the trained key order, constraint costs nothing. Now there's a key-order test and a runtime warning.
 
 **Field testing is next.** The app and server are instrumented for it: opt-in battery and radio samples, plus a delivery-latency log. [`docs/FIELD_TEST.md`](docs/FIELD_TEST.md) turns one night out into a report with battery drain per hour, Bluetooth detection, and alert latency (p50/p95).
 
