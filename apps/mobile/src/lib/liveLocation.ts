@@ -64,7 +64,16 @@ async function upload(fix: GeoFix): Promise<boolean> {
   if (!profile || !membership || !profile.shareLiveLocation) return false;
   try {
     const escrow = profile.contactLocation !== false && profile.policy.contacts.length > 0;
-    await client(profile.serverUrl, membership.token).location(true, await backgroundLocationPayload(membership, fix, escrow));
+    const api = client(profile.serverUrl, membership.token);
+    const payload = await backgroundLocationPayload(membership, fix, escrow);
+    try {
+      await api.location(true, payload);
+    } catch (e) {
+      // The group key rotated (someone left) and this phone hasn't been sent the new one yet:
+      // never fall back to the old key; send only the contacts copy, if allowed.
+      if (!(e instanceof ApiError && e.code === 'stale-epoch')) throw e;
+      await api.location(true, payload.location ? { location: payload.location } : {});
+    }
     lastSent = fix;
     return true;
   } catch (e) {

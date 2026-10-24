@@ -71,6 +71,10 @@ export async function buildApp(opts: AppOptions) {
 
   function broadcast(session: Session) {
     for (const c of live.get(session.id) ?? []) {
+      if (session.members.find((m) => m.id === c.memberId)?.leftAt != null) {
+        c.ws.close(4403, 'left');
+        continue;
+      }
       try {
         c.ws.send(JSON.stringify({ type: 'view', view: view(session, c.memberId) }));
       } catch {
@@ -112,6 +116,8 @@ export async function buildApp(opts: AppOptions) {
     if (!limiter(`t:${auth.memberId}`, 120)) throw new HttpError(429, 'slow-down', 'too many requests');
     const session = store.get(auth.sessionId);
     if (!session) throw new HttpError(404, 'gone', 'this session no longer exists');
+    // Someone who left keeps nothing: not the board, not new ciphertext, not the live feed.
+    if (session.members.find((m) => m.id === auth.memberId)?.leftAt != null) throw new HttpError(403, 'left', 'you left this huddle');
     return { ...auth, session };
   }
 

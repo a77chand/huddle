@@ -178,7 +178,7 @@ export function sos(
   applyLocation(s, m, extra);
   // Encrypted huddles never keep a plaintext status, even if a client sends one.
   const status = s.e2e ? null : (extra.status?.slice(0, 120) ?? null);
-  const sealedStatus = extra.sealedStatus ? checkSealed(extra.sealedStatus) : null;
+  const sealedStatus = extra.sealedStatus ? checkSealed(extra.sealedStatus, s) : null;
   log(s, { at: now, kind: 'sos', memberId, detail: status ?? undefined });
   if (m.sos) {
     m.sos.status = status ?? m.sos.status;
@@ -208,7 +208,7 @@ export function attachSealedCard(session: Session, memberId: string, blob: strin
   const s = open(session);
   const m = active(s, memberId);
   if (!s.e2e) throw new HuddleError('not-e2e', 'this huddle is not encrypted');
-  m.sealedCard = { blob: checkSealed(blob), at: now };
+  m.sealedCard = { blob: checkSealed(blob, s), at: now };
   log(s, { at: now, kind: 'card', memberId });
   return { session: s, effects: [{ kind: 'card', memberId }] };
 }
@@ -433,7 +433,7 @@ function applyLocation(s: Session, m: Member, input: LocationInput) {
   const newer = (cur: { at: Millis } | null | undefined, next: { at: Millis }) => !cur || next.at >= cur.at;
   if (input.sealedLocation) {
     if (!s.e2e) throw new HuddleError('not-e2e', 'this huddle is not encrypted');
-    const sealed = { blob: checkSealed(input.sealedLocation.blob), at: input.sealedLocation.at };
+    const sealed = { blob: checkSealed(input.sealedLocation.blob, s), at: input.sealedLocation.at };
     if (newer(m.sealedLocation, sealed)) m.sealedLocation = sealed;
   }
   if (input.location) {
@@ -449,9 +449,11 @@ function wipeLocations(m: Member) {
   m.contactLocation = null;
 }
 
-function checkSealed(blob: string): string {
-  if (typeof blob !== 'string' || blob.length > 8192 || !/^e1\.\d+\.[A-Za-z0-9_-]+$/.test(blob))
-    throw new HuddleError('bad-sealed', 'expected an encrypted value');
+function checkSealed(blob: string, s: Session): string {
+  const m = typeof blob === 'string' && blob.length <= 8192 ? /^e1\.(\d+)\.[A-Za-z0-9_-]+$/.exec(blob) : null;
+  if (!m) throw new HuddleError('bad-sealed', 'expected an encrypted value');
+  // Only the current epoch: anything sealed under an older key is readable by people who have left.
+  if (Number(m[1]) !== (s.keyEpoch ?? 1)) throw new HuddleError('stale-epoch', 'sealed with an old group key; fetch the new one');
   return blob;
 }
 

@@ -159,7 +159,7 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
       };
       ws.onclose = (e) => {
         if (closed) return;
-        if (e.code === 4401) return void forget();
+        if (e.code === 4401 || e.code === 4403) return void forget();
         setConnection('polling');
         timer = setTimeout(connect, retry);
         retry = Math.min(retry * 2, 30_000);
