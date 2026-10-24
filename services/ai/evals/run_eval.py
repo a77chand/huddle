@@ -28,12 +28,14 @@ def main() -> int:
     rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     stats = {f: {"tp": 0, "fp": 0, "fn": 0, "wrong": 0, "tn": 0} for f in FIELDS}
     dropped = 0
+    rewritten: list[str] = []
     fell_back = 0
     misses: list[str] = []
     t0 = time.time()
     for r in rows:
         card = extract_card(r["transcript"], llm)
         dropped += len(card.dropped)
+        rewritten += [f"{r['id']}.{f}: {getattr(card, f).quote!r}" for f in card.rewritten]
         fell_back += llm is not None and card.extractor != llm.model
         for f in FIELDS:
             want, got = r["expect"][f], getattr(card, f)
@@ -66,10 +68,13 @@ def main() -> int:
     n = len(rows) * len(FIELDS)
     print(f"{'overall':20} {tot['ok'] / n:>8.1%} {tot['fp']:>9} {tot['fn']:>7} {tot['wrong']:>6}")
     print(f"quotes not found in transcript (dropped by grounding): {dropped}")
+    print(f"values not supported by their quote (shown as the quote instead): {len(rewritten)}")
     if fell_back:
         print(f"WARNING: {fell_back}/{len(rows)} notes fell back to rules (model error or timeout) — not a model score")
     if "-v" in sys.argv:
         print("\n".join(misses))
+        if rewritten:
+            print("rewritten:\n" + "\n".join(rewritten))
     return 0
 
 

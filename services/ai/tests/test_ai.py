@@ -80,3 +80,23 @@ def test_voice_card_endpoint():
 def test_health_reports_components():
     body = TestClient(create_app(llm=None, stt=None)).get("/health").json()
     assert body == {"ok": True, "llm": None, "stt": False}
+
+
+def test_grounding_matches_shared_cases():
+    """Same cases as packages/core/test/grounding.test.ts, so phone and server agree."""
+    import json
+    from pathlib import Path
+
+    cases = json.loads((Path(__file__).parents[3] / "fixtures" / "grounding-cases.json").read_text())
+    for c in cases:
+        card = ground(c["transcript"], {c["field"]: {"value": c["value"], "quote": c["quote"]}}, "case")
+        got = getattr(card, c["field"])
+        outcome = (
+            "dropped" if c["field"] in card.dropped
+            else "rewritten" if c["field"] in card.rewritten
+            else "kept" if got is not None
+            else "absent"
+        )
+        assert outcome == c["expect"], f"{c['why']}: expected {c['expect']}, got {outcome}"
+        if outcome == "rewritten":
+            assert got.value == c["quote"], "an unsupported value is replaced by the speaker's words"

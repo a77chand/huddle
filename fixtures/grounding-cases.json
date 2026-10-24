@@ -1,0 +1,122 @@
+[
+ {
+  "why": "faithful value inside its quote",
+  "transcript": "I'm near the north entrance, please call me",
+  "field": "stated_location",
+  "value": "north entrance",
+  "quote": "near the north entrance",
+  "expect": "kept"
+ },
+ {
+  "why": "invented value next to a real quote",
+  "transcript": "I'm near the north entrance, please call me",
+  "field": "stated_location",
+  "value": "at the hospital",
+  "quote": "near the north entrance",
+  "expect": "rewritten"
+ },
+ {
+  "why": "one-word quote is no evidence",
+  "transcript": "I'm near the north entrance, please call me",
+  "field": "stated_location",
+  "value": "parking garage level 3",
+  "quote": "the",
+  "expect": "dropped"
+ },
+ {
+  "why": "escalated request from a real word",
+  "transcript": "I'm near the north entrance, please call me",
+  "field": "requested_action",
+  "value": "call the police",
+  "quote": "please call me",
+  "expect": "rewritten"
+ },
+ {
+  "why": "quote not in transcript",
+  "transcript": "I'm near the north entrance, please call me",
+  "field": "requested_action",
+  "value": "come inside",
+  "quote": "come inside now",
+  "expect": "dropped"
+ },
+ {
+  "why": "word endings differ (feels/feel)",
+  "transcript": "I feel really dizzy",
+  "field": "condition",
+  "value": "feels dizzy",
+  "quote": "I feel really dizzy",
+  "expect": "kept"
+ },
+ {
+  "why": "KNOWN LIMIT: a pronoun swap (my/your are stopwords) is not caught; the quote shown beside it is still real",
+  "transcript": "I'm coming to your place",
+  "field": "requested_action",
+  "value": "come to my places",
+  "quote": "coming to your place",
+  "expect": "kept"
+ },
+ {
+  "why": "verb forms differ but meaning kept",
+  "transcript": "they are coming to get me",
+  "field": "requested_action",
+  "value": "come get me",
+  "quote": "coming to get me",
+  "expect": "kept"
+ },
+ {
+  "why": "value drops the negation word only",
+  "transcript": "please don't come inside",
+  "field": "avoid",
+  "value": "come inside",
+  "quote": "don't come inside",
+  "expect": "kept"
+ },
+ {
+  "why": "canonical contact label",
+  "transcript": "just text me",
+  "field": "contact_preference",
+  "value": "text",
+  "quote": "just text me",
+  "expect": "kept"
+ },
+ {
+  "why": "canonical label for calls",
+  "transcript": "Call mat karna",
+  "field": "contact_preference",
+  "value": "no calls",
+  "quote": "Call mat karna",
+  "expect": "kept"
+ },
+ {
+  "why": "free-text contact value must still be supported",
+  "transcript": "just text me",
+  "field": "contact_preference",
+  "value": "email me",
+  "quote": "just text me",
+  "expect": "rewritten"
+ },
+ {
+  "why": "other languages",
+  "transcript": "Estoy en la entrada sur, no me siento bien",
+  "field": "stated_location",
+  "value": "la entrada sur",
+  "quote": "en la entrada sur",
+  "expect": "kept"
+ },
+ {
+  "why": "case and punctuation",
+  "transcript": "I'm by the DJ booth!!",
+  "field": "stated_location",
+  "value": "DJ Booth",
+  "quote": "by the dj booth",
+  "expect": "kept"
+ },
+ {
+  "why": "placeholder value",
+  "transcript": "Help.",
+  "field": "avoid",
+  "value": "null",
+  "quote": "null",
+  "expect": "absent"
+ }
+]

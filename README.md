@@ -109,15 +109,15 @@ On-device mode is opt-in (one-time download on Wi-Fi). The recording never leave
 | Extractor | Download | Held-out test | Speed (laptop) |
 |---|---|---|---|
 | Rules baseline | — | 68.0% | instant |
-| Gemma 3 4B, few-shot | 3.3 GB | 84.0% | 11.0 s/note |
-| **huddle-extractor-0.5b Q8** | **531 MB** | **85.0%** | 1.9 s/note |
+| Gemma 3 4B, few-shot | 3.3 GB | 82.5% | 11.0 s/note |
+| **huddle-extractor-0.5b Q8** | **531 MB** | **84.5%** | 1.9 s/note |
 | **huddle-extractor-0.5b Q4** (phone default) | **398 MB** | **83.5%** | 1.6 s/note |
 
 Two findings from the experiments:
 - **Grammar-constrained JSON decoding hurt the fine-tune** (78% vs 83.5%), because the model already emits the schema. So it runs unconstrained, with grounding as the safety net.
 - **4-bit quantization cost almost nothing:** f16 and Q8 scored the same through the same serving path.
 
-The fine-tune invents slightly more fields than Gemma (12 vs 6), mostly a destination read as the speaker's location. Each one still quotes the speaker's real words. Reproduce any row with `python -m evals.run_eval --set test -v`.
+Scores are after grounding, including the value check: Gemma had 10 values that went beyond their quotes (5 English translations of non-English quotes, 1 resolved pronoun, 4 genuinely unsupported), so it lost 1.5 points. The fine-tune had 4. The fine-tune fills more fields Gemma left empty (12 vs 6), mostly a destination read as the speaker's location, but each one still quotes the speaker's real words. Reproduce any row with `python -m evals.run_eval --set test -v`.
 
 ## Architecture
 
@@ -137,7 +137,7 @@ Design decisions that matter for safety:
 
 - **The server owns escalation.** The phone of the person in trouble might be dead, so a server-side clock decides when to tell the group. The phone schedules its own "Still okay?" prompts so those work without signal.
 - **AI is never on the alert path.** The SOS goes out first. The voice note is processed afterwards and only *adds* detail. If the model is down, a rules-based extractor takes over. If speech-to-text is down, the preset status still goes through.
-- **Grounding.** Every extracted field must carry a quote that literally appears in the transcript, or it's dropped. A model can't invent a location or a request.
+- **Grounding.** Every extracted field must carry a quote that literally appears in the transcript, or it's dropped. The displayed value may say no more than its quote: every content word in "near the north entrance → north entrance" must come from the quote. A value that goes further ("call the police" next to "please call me") is replaced by the speaker's own words. So nothing shown to friends contains a word the speaker didn't say in that quote. It doesn't make the model *right*: a correctly quoted phrase can still land in the wrong field, which is why the quote is always shown next to the value. The same rules run in Python and TypeScript and are tested against [one shared case file](fixtures/grounding-cases.json).
 - **Deterministic summaries.** Counts, times, "what we know / don't know" and next steps come from the engine, not a model.
 
 ## Run it
