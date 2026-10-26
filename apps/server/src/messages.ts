@@ -20,7 +20,11 @@ export interface SmsMessage {
 export type Outbound = PushMessage | SmsMessage;
 
 /** Turn engine effects into concrete notifications. Pure. */
-export function render(session: Session, effects: Effect[], now: Millis): Outbound[] {
+/**
+ * `contactLink(memberId)` returns a live status page URL for that member's
+ * emergency contacts (or null when the server has no public URL).
+ */
+export function render(session: Session, effects: Effect[], now: Millis, contactLink: (memberId: string) => string | null = () => null): Outbound[] {
   const out: Outbound[] = [];
   const name = (id: string) => session.members.find((m) => m.id === id)?.name ?? 'Someone';
   const others = (...exclude: string[]) =>
@@ -55,7 +59,14 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
       case 'contacts-alert': {
         const i = incident(session, m.id, now, { forContacts: true });
         const to = m.policy.contacts.map((c) => c.phone);
-        if (i && to.length) out.push({ channel: 'sms', to, body: incidentText(i, session.name), data: { sessionId: session.id, memberId: m.id, kind: e.kind } });
+        const link = contactLink(m.id);
+        if (i && to.length)
+          out.push({
+            channel: 'sms',
+            to,
+            body: incidentText(i, session.name) + (link ? `\nLive updates: ${link}` : ''),
+            data: { sessionId: session.id, memberId: m.id, kind: e.kind },
+          });
         break;
       }
       case 'responder':

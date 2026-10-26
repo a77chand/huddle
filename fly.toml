@@ -13,6 +13,7 @@ primary_region = "iad"
 [env]
   DATABASE_PATH = "/data/huddle.db"
   PORT = "8787"
+  PUBLIC_URL = "https://huddle-server.fly.dev"   # change to your app's URL
 
 [mounts]
   source = "huddle_data"

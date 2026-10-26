@@ -429,6 +429,46 @@ test('host removes a member: they are cut off and the group is told', async () =
   assert.ok(t.pushes.some((p) => p.msg.title === 'Ana removed Cy'));
 });
 
+test('emergency contacts get a live link: incident while it matters, all-clear after, nothing once the huddle ends', async () => {
+  let clock = T0;
+  const sms: string[] = [];
+  const h = await buildApp({
+    store: new Store(':memory:'),
+    sender: { push: async () => {}, sms: async (_to, body) => void sms.push(body) },
+    makeCard: async () => bareCard(null),
+    now: () => clock,
+    publicUrl: 'https://huddle.example',
+  });
+  const call = async (method: 'GET' | 'POST', url: string, token?: string, payload?: object) => {
+    const r = await h.app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload });
+    return { status: r.statusCode, json: r.json() };
+  };
+  const policy = { intervalMin: 20, graceMin: 10, escalateAfterMin: 15, contacts: [{ name: 'Mom', phone: '+14155550123' }] };
+  const created = (await call('POST', '/v1/sessions', undefined, { name: 'Concert <b>', memberName: 'Cy <script>', policy, timeZone: 'America/New_York' })).json;
+  clock += 60 * MIN;
+  h.runDue();
+  await h.idle();
+  const link = /Live updates: (https:\/\/huddle\.example\/c\/[A-Za-z0-9_-]+)/.exec(sms[0]!)![1]!;
+  const path = link.replace('https://huddle.example', '');
+  const page = await h.app.inject({ method: 'GET', url: path });
+  assert.equal(page.statusCode, 200);
+  assert.match(page.headers['content-security-policy'] as string, /default-src 'none'/);
+  assert.match(page.body, /missed a check-in — unreachable, not confirmed in danger/);
+  assert.match(page.body, /Nobody in the group has said they’re on it yet/);
+  assert.ok(!page.body.includes('<script>'), 'names are escaped');
+  assert.ok(page.body.includes('Cy &lt;script&gt;'));
+  assert.ok(!/tap &quot;/i.test(page.body), 'no app-only instructions for contacts');
+
+  await call('POST', '/v1/check-in', created.token);
+  const after = await h.app.inject({ method: 'GET', url: path });
+  assert.match(after.body, /All clear/);
+  assert.equal((await h.app.inject({ method: 'GET', url: '/c/not-a-real-token' })).statusCode, 404);
+  clock += 13 * 60 * MIN;
+  h.runDue();
+  assert.equal((await h.app.inject({ method: 'GET', url: path })).statusCode, 410, 'link dies with the huddle');
+  await h.app.close();
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

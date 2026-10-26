@@ -80,6 +80,13 @@ export class Store {
         by_member TEXT NOT NULL,
         PRIMARY KEY (session_id, member_id, epoch)
       );
+      -- Unguessable links that let a member's emergency contacts follow the incident.
+      CREATE TABLE IF NOT EXISTS contact_links (
+        token TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        UNIQUE (session_id, member_id)
+      );
       CREATE TABLE IF NOT EXISTS push_tokens (
         session_id TEXT NOT NULL,
         member_id TEXT NOT NULL,
@@ -157,6 +164,24 @@ export class Store {
     return new Set(rows.map((r) => r.member_id));
   }
 
+  /** The contacts' link token for a member, created on first use. */
+  contactLink(sessionId: string, memberId: string): string {
+    const row = this.db.prepare('SELECT token FROM contact_links WHERE session_id = ? AND member_id = ?').get(sessionId, memberId) as
+      | { token: string }
+      | undefined;
+    if (row) return row.token;
+    const token = randomBytes(18).toString('base64url');
+    this.db.prepare('INSERT INTO contact_links VALUES (?, ?, ?)').run(token, sessionId, memberId);
+    return token;
+  }
+
+  byContactLink(token: string): { sessionId: string; memberId: string } | null {
+    const row = this.db.prepare('SELECT session_id, member_id FROM contact_links WHERE token = ?').get(token) as
+      | { session_id: string; member_id: string }
+      | undefined;
+    return row ? { sessionId: row.session_id, memberId: row.member_id } : null;
+  }
+
   allSessionIds(): string[] {
     return (this.db.prepare('SELECT id FROM sessions ORDER BY ends_at').all() as { id: string }[]).map((r) => r.id);
   }
@@ -212,6 +237,7 @@ export class Store {
     for (const id of ids) {
       this.db.prepare('DELETE FROM deliveries WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM key_wraps WHERE session_id = ?').run(id);
+      this.db.prepare('DELETE FROM contact_links WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM diagnostics WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM tokens WHERE session_id = ?').run(id);
       this.db.prepare('DELETE FROM push_tokens WHERE session_id = ?').run(id);

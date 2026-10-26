@@ -10,6 +10,7 @@ const { app, runDue, idle } = await buildApp({
   sender: senderFromEnv(env, (m) => console.warn(m)),
   makeCard: aiService(env.AI_URL),
   logger: true,
+  publicUrl: env.PUBLIC_URL,
 });
 if (!env.AI_URL) app.log.warn('AI_URL not set: voice notes are stored as preset status only.');
 

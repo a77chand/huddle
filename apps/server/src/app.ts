@@ -7,6 +7,7 @@ import { HuddleError, type CheckInPolicy, type GeoFix, type Result, type Session
 import { bareCard, type CardMaker } from './ai.ts';
 import { render } from './messages.ts';
 import { buildReport, toMarkdown } from './report.ts';
+import { contactPage } from './contactPage.ts';
 import { deliver, type Sender } from './notify.ts';
 import { Store, type Auth } from './store.ts';
 
@@ -16,6 +17,8 @@ export interface AppOptions {
   makeCard: CardMaker;
   now?: () => number;
   logger?: boolean;
+  /** Public base URL (e.g. https://huddle.example.com) for links in texts to emergency contacts. */
+  publicUrl?: string;
 }
 
 export async function buildApp(opts: AppOptions) {
@@ -91,7 +94,8 @@ export async function buildApp(opts: AppOptions) {
     store.save(r.session);
     broadcast(r.session);
     if (r.effects.length) {
-      const out = render(r.session, r.effects, now());
+      const base = opts.publicUrl?.replace(/\/$/, '');
+      const out = render(r.session, r.effects, now(), (memberId) => (base ? `${base}/c/${store.contactLink(r.session.id, memberId)}` : null));
       const p = deliver(sender, store.pushTokens(r.session.id), out, log, (d) =>
         store.logDelivery({
           sessionId: d.message.data.sessionId,
@@ -127,6 +131,19 @@ export async function buildApp(opts: AppOptions) {
   }
 
   app.get('/health', async () => ({ ok: true }));
+
+  /** Live status page for a member's emergency contacts (the link in their text). */
+  app.get('/c/:token', async (req, reply) => {
+    if (!limiter(`ip:${req.ip}:c`, 60)) return reply.code(429).type('text/plain').send('slow down');
+    const link = store.byContactLink((req.params as { token: string }).token);
+    const { status, html } = link ? contactPage(store.get(link.sessionId), link.memberId, now()) : contactPage(null, '', now());
+    return reply
+      .code(link ? status : 404)
+      .header('cache-control', 'no-store')
+      .header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'")
+      .type('text/html; charset=utf-8')
+      .send(html);
+  });
 
   app.post('/v1/sessions', async (req) => {
     if (!limiter(`ip:${req.ip}`, 20)) throw new HttpError(429, 'slow-down', 'too many sessions');
