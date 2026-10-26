@@ -21,6 +21,7 @@ export default function Layout() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="setup" options={{ title: 'Your details' }} />
         <Stack.Screen name="start" options={{ title: 'Huddle' }} />
         <Stack.Screen name="session" options={{ headerShown: false }} />

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, Switch, Text, View } from 'react-native';
 import type { Contact } from '@huddle/core';
 import { useHuddle } from '../lib/huddle';
 import { allInstalled, download, MODELS, removeModels } from '../lib/ondevice';
@@ -225,6 +225,7 @@ export default function Setup() {
       </Card>
 
       <Button title="Save" onPress={save} busy={busy} />
+      <Button kind="secondary" title="Privacy policy" onPress={() => Linking.openURL('https://github.com/a77chand/huddle/blob/main/docs/PRIVACY.md')} />
     </ScrollView>
   );
 }
