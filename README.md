@@ -10,6 +10,14 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 
 > Huddle is not an emergency service. If someone may be in immediate danger, call your local emergency number.
 
+<p align="center">
+  <img src="docs/screenshots/onboarding.png" width="23%" alt="Onboarding explains each permission before asking">
+  <img src="docs/screenshots/group.png" width="23%" alt="The group: one friend unreachable with someone responding, one asking for help">
+  <img src="docs/screenshots/incident.png" width="23%" alt="A friend's SOS, decrypted on the phone: location, what they asked, and what not to do, in their own words">
+  <img src="docs/screenshots/sos.png" width="23%" alt="After pressing SOS: record a voice note or tap a status">
+</p>
+<p align="center"><sub>Running on Android: onboarding · the group (one friend unreachable, one asking for help) · a friend's SOS, decrypted on the phone · after pressing SOS</sub></p>
+
 ## Features
 
 - **Shared sessions.** Start a huddle and share a 6-character code. It ends on its own after 4–24 hours.
@@ -214,6 +222,7 @@ Verified:
 - A fine-tuned model evaluated on a held-out set, with every number reproducible from one command.
 - End-to-end runs with real Whisper and Gemma on spoken English and Spanish.
 - Native Android and iOS builds compile, including Bluetooth, llama.cpp and whisper.cpp.
+- **Runs on Android** (an Android 16 emulator, release build): onboarding with real permission prompts, check-ins, server-driven escalation arriving live, "I'm on it", SOS, and **end-to-end encryption across implementations**. The phone automatically shared the group key with a separately written client. That client's encrypted SOS (location, status, voice card) was decrypted and shown on the phone, while the server's database held only ciphertext.
 
 ### What adversarial testing caught
 
@@ -222,6 +231,14 @@ The hardest parts were probed by trying to break them. Each find is now a regres
 - **A member who left could still read the board.** The encryption was sound, but the server accepted their token and kept their live WebSocket open. And a friend's background location upload, sent before their phone had the new key, could still be locked with the old one. Fixed: leavers are refused and disconnected, and old-key ciphertext is rejected.
 - **Grounding checked the quote but not the value.** A model could show "call the police" next to the real words "please call me". Fixed: a value may only contain words from its quote, or the speaker's own words are shown instead.
 - **"Constrained decoding hurts" was the wrong diagnosis.** Raw outputs showed Ollama alphabetizing the JSON keys for the imported model, so it had to write the quote before deciding anything was said. In the trained key order, constraint costs nothing. Now there's a key-order test and a runtime warning.
+
+### What running it on a phone caught
+
+Things no unit test would have found, all fixed:
+
+- **Android's "Location Accuracy" settings dialog popped up in the middle of an SOS**, and check-ins lost their location while it showed. Location now never asks Android to show that dialog.
+- **The SOS screen said "they have your location" when none had been sent.** It now says so honestly, and asks the person to say where they are.
+- **"Text their emergency contacts" was offered for someone with no contacts**, and "Remove" sat between the help actions. Both fixed, with a regression test for the first.
 
 **Field testing is next.** The app and server are instrumented for it: opt-in battery and radio samples, plus a delivery-latency log. [`docs/FIELD_TEST.md`](docs/FIELD_TEST.md) turns one night out into a report with battery drain per hour, Bluetooth detection, and alert latency (p50/p95).
 
