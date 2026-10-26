@@ -20,7 +20,7 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function wav(pcm: Uint8Array): Uint8Array {
+export function wav(pcm: Uint8Array): Uint8Array {
   const header = new ArrayBuffer(44);
   const v = new DataView(header);
   const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
