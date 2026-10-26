@@ -17,7 +17,8 @@ Most safety apps are an individual panic button that sends a vague "SOS". Huddle
 - **SOS** from a press-and-hold button, or a discreet shortcut such as the iPhone Action Button or Back Tap.
 - **Voice notes and quick statuses** ("Call me", "Don't come in") turned into clear instructions for friends, on the phone or on the server.
 - **"I'm on it"** coordination, so the group knows who is handling an alert.
-- **Emergency contacts outside the app** get an SMS with what is known, then an all-clear when it's over.
+- **Emergency contacts outside the app** get an SMS with what is known and a **live status link**: a simple page that updates itself (what's known, who's responding, the all-clear) and needs no app.
+- **The host can remove someone.** The group key rotates, so they can't read anything shared afterwards.
 - **Bluetooth "last seen near".** Phones quietly note which friends' phones were nearby, even with no signal.
 - **Low-battery alert.** At 5% the group gets your last location before your phone dies.
 - **Optional live location**, off by default, using low-power positioning.
@@ -142,6 +143,7 @@ services/ai                      Python: Whisper speech-to-text + open-weight LL
 services/ai/finetune             Dataset generator, LoRA training (MLX / PyTorch), model card
 fixtures/                        Grounding cases shared by the Python and TypeScript tests
 docs/SECURITY.md                 Encryption design and threat model
+docs/PRIVACY.md                  Plain-language privacy policy (what's collected, who can read it, how long it's kept)
 docs/FIELD_TEST.md               How to measure battery, Bluetooth and alert latency on a real night
 ```
 
@@ -186,7 +188,7 @@ Use a [development build](https://docs.expo.dev/develop/development-builds/intro
 
 **Everything with Docker:** `cp .env.example .env && docker compose up -d && docker compose exec ollama ollama pull gemma3:4b`
 
-**SMS** to emergency contacts uses Twilio. Set `TWILIO_*` in `.env`. Without it, contact alerts are logged.
+**SMS** to emergency contacts uses Twilio. Set `TWILIO_*` in `.env`. Without it, contact alerts are logged. Set `PUBLIC_URL` to include the live status link in those texts.
 
 ### Discreet triggers
 
@@ -198,7 +200,7 @@ The app handles `huddle://sos` (3-second cancellable countdown, then alert) and 
 ## Tests
 
 ```bash
-npm test                                   # engine, encryption protocol, server end-to-end (fake clock, fake push/SMS)
+npm test                                   # engine, encryption protocol, server end-to-end, app (jest-expo)
 npm run typecheck
 cd services/ai && .venv/bin/pytest -q      # grounding, fallback, API, schema key order
 ```
@@ -208,7 +210,7 @@ CI runs all of the above and bundles the app. It also compiles full native Andro
 ## Status
 
 Verified:
-- 47 automated tests across the engine, server and AI service. They include the encryption protocol run by three simulated phones (key exchange, someone leaving, two phones racing to re-key).
+- 60 automated tests across the engine, server, app and AI service. They include the encryption protocol run by three simulated phones (key exchange, someone leaving, two phones racing to re-key).
 - A fine-tuned model evaluated on a held-out set, with every number reproducible from one command.
 - End-to-end runs with real Whisper and Gemma on spoken English and Spanish.
 - Native Android and iOS builds compile, including Bluetooth, llama.cpp and whisper.cpp.
@@ -229,7 +231,6 @@ The hardest parts were probed by trying to break them. Each find is now a regres
 - A Bluetooth-only foreground service on Android, so all-night scanning doesn't require live location. Distance hints from RSSI.
 - Native home-screen widget and watch complication for one-tap check-in.
 - Fine-tune v2 with real (consented) voice notes from noisy venues, and on-phone latency numbers.
-- Web link for SMS contacts to see the live incident without installing the app.
 
 ## License
 
