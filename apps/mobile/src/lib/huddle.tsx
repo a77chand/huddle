@@ -59,6 +59,8 @@ interface Huddle {
   myPublicKey: string | null;
   checkIn(): Promise<void>;
   sos(status?: string): Promise<SosResult>;
+  /** Whether the last SOS included a location (so the screen never claims one it didn't send). */
+  lastSosLocated: boolean;
   sendStatus(status: string): Promise<void>;
   sendVoice(uri: string, presetStatus?: string): Promise<void>;
   snooze(minutes: number): Promise<void>;
@@ -89,6 +91,7 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
   const view = useMemo(() => (rawView ? decryptView(rawView, keys) : null), [rawView, keys]);
   const [connection, setConnection] = useState<Connection>('offline');
   const [pendingCheckIn, setPendingCheckIn] = useState(false);
+  const [lastSosLocated, setLastSosLocated] = useState(false);
   const [modelsInstalled, setModelsInstalled] = useState(() => allInstalled());
   const [onDeviceTimings, setOnDeviceTimings] = useState<{ transcribeMs: number; extractMs: number }[]>([]);
   const onDeviceReady = profile?.onDeviceAI === true && modelsInstalled;
@@ -313,6 +316,7 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     me,
     connection,
     pendingCheckIn,
+    lastSosLocated,
     proximity: proximityStatus,
     liveLocation,
     batterySaver,
@@ -372,6 +376,7 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     async sos(status) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       const location = await currentFix(4000);
+      setLastSosLocated(Boolean(location));
       try {
         const s = sealNow();
         await run(() => api.sos(locationPayload(location), status && encrypted ? (s ? { sealedStatus: s.status(status) } : {}) : { status }));

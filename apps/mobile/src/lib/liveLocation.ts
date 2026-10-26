@@ -20,6 +20,7 @@ const MIN_MOVE_M = 150;
 
 const TASK_OPTIONS: Location.LocationTaskOptions = {
   accuracy: Location.Accuracy.Balanced,
+  mayShowUserSettingsDialog: false,
   distanceInterval: MIN_MOVE_M,
   timeInterval: 2 * 60_000,
   deferredUpdatesDistance: MIN_MOVE_M,
@@ -133,7 +134,7 @@ export function useLiveLocation(opts: { enabled: boolean; batterySaver: boolean;
         setStatus('on');
       } else {
         watch = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: MIN_MOVE_M, timeInterval: 2 * 60_000 },
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: MIN_MOVE_M, timeInterval: 2 * 60_000, mayShowUserSettingsDialog: false },
           (l) => void upload({ lat: l.coords.latitude, lng: l.coords.longitude, accuracyM: l.coords.accuracy ?? undefined, at: l.timestamp }),
         );
         if (cancelled) watch.remove();

@@ -1,0 +1,52 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:1:1-10:12
+INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:1:1-10:12
+	package
+		INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml
+	xmlns:tools
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:1:70-116
+	xmlns:android
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:1:11-69
+uses-permission#android.permission.BLUETOOTH
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:3-93
+	android:maxSdkVersion
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:64-90
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:20-63
+uses-permission#android.permission.BLUETOOTH_ADMIN
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:3-99
+	android:maxSdkVersion
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:70-96
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:20-69
+uses-permission#android.permission.BLUETOOTH_SCAN
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:3-138
+	android:usesPermissionFlags
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:69-115
+	tools:targetApi
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:116-135
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:20-68
+uses-permission#android.permission.BLUETOOTH_ADVERTISE
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:7:3-76
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:7:20-73
+uses-permission#android.permission.BLUETOOTH_CONNECT
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:8:3-74
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:8:20-71
+uses-feature#android.hardware.bluetooth_le
+ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:3-89
+	android:required
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:62-86
+	android:name
+		ADDED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:17-61
+uses-sdk
+INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml
+INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml

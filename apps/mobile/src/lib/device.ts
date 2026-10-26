@@ -125,7 +125,8 @@ export async function currentFix(timeoutMs = 6000): Promise<GeoFix | undefined> 
       accuracyM: l.coords.accuracy ?? undefined,
       at: l.timestamp,
     });
-    const fresh = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).then(toFix);
+    // Never pop Android's "Location Accuracy" settings dialog — certainly not mid-SOS. Use what's available.
+    const fresh = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: false }).then(toFix);
     const timeout = new Promise<undefined>((r) => setTimeout(() => r(undefined), timeoutMs));
     const fix = await Promise.race([fresh, timeout]);
     if (fix) return fix;

@@ -1,0 +1,45 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    xmlns:tools="http://schemas.android.com/tools"
+4    package="dev.huddle.proximity" >
+5
+6    <uses-sdk android:minSdkVersion="24" />
+6-->INJECTED
+6-->INJECTED
+7    <!-- Android 11 and below -->
+8    <uses-permission
+8-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:3-93
+9        android:name="android.permission.BLUETOOTH"
+9-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:20-63
+10        android:maxSdkVersion="30" />
+10-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:3:64-90
+11    <uses-permission
+11-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:3-99
+12        android:name="android.permission.BLUETOOTH_ADMIN"
+12-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:20-69
+13        android:maxSdkVersion="30" />
+13-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:4:70-96
+14    <!-- Android 12+: proximity is never used to derive location -->
+15    <uses-permission
+15-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:3-138
+16        android:name="android.permission.BLUETOOTH_SCAN"
+16-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:20-68
+17        android:usesPermissionFlags="neverForLocation"
+17-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:69-115
+18        tools:targetApi="s" />
+18-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:6:116-135
+19    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+19-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:7:3-76
+19-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:7:20-73
+20    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+20-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:8:3-74
+20-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:8:20-71
+21
+22    <uses-feature
+22-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:3-89
+23        android:name="android.hardware.bluetooth_le"
+23-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:17-61
+24        android:required="false" />
+24-->/Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/AndroidManifest.xml:9:62-86
+25
+26</manifest>

@@ -129,7 +129,9 @@ export default function Sos() {
         </H>
         <P muted>
           {result === 'sent'
-            ? 'They have your location and the time. Add details so they know what to do.'
+            ? h.lastSosLocated || h.me?.lastLocation
+              ? 'They have your location and the time. Add details so they know what to do.'
+              : 'They know you need help and when — your location couldn’t be read. Say where you are so they can find you.'
             : result === 'failed'
               ? 'No connection and no contacts to text. If you are in danger, call local emergency services.'
               : ''}

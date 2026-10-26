@@ -1,0 +1,9 @@
+dev.huddle.proximity.huddle-proximity-pngs-0 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/generated/res/pngs/release
+dev.huddle.proximity.huddle-proximity-updated_navigation_xml-1 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/generated/updated_navigation_xml/release
+dev.huddle.proximity.huddle-proximity-mergeReleaseResources-2 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+dev.huddle.proximity.huddle-proximity-mergeReleaseResources-3 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+dev.huddle.proximity.huddle-proximity-release-4 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/intermediates/merged_res/release/mergeReleaseResources
+dev.huddle.proximity.huddle-proximity-release-5 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/build/intermediates/packaged_res/release/packageReleaseResources
+dev.huddle.proximity.huddle-proximity-main-6 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/main/res
+dev.huddle.proximity.huddle-proximity-release-7 /Users/anusha/Documents/1 Anusha/Portfolio/Github/huddle/apps/mobile/modules/huddle-proximity/android/src/release/res
+gradleHome-0 /Users/anusha/.gradle

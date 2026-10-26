@@ -36,7 +36,7 @@ export function huddleMock(view: View, extra: Record<string, unknown> = {}) {
   return {
     ready: true, profile: { name: 'Ana', phone: '', serverUrl: 'http://x', policy: {} }, membership: { token: 't', sessionId: 's1', memberId: view.me },
     view, me, connection: 'live', pendingCheckIn: false, proximity: 'poweredOn', liveLocation: 'off', batterySaver: false,
-    onDeviceReady: false, onDeviceTimings: [], encryptionReady: true, inviteLink: 'huddle://start?code=ABC123', myPublicKey: null,
+    onDeviceReady: false, onDeviceTimings: [], lastSosLocated: false, encryptionReady: true, inviteLink: 'huddle://start?code=ABC123', myPublicKey: null,
     refreshOnDevice: jest.fn(), saveProfile: fn(), start: fn(), join: fn(), checkIn: fn(), sos: fn(), sendStatus: fn(), sendVoice: fn(),
     snooze: fn(), ack: fn(), escalate: fn(), resolve: fn(), remove: fn(), updatePolicy: fn(), leave: fn(), refresh: fn(),
     ...extra,

@@ -51,6 +51,8 @@ describe("a friend's screen", () => {
     expect(screen.getByText("What we don't know")).toBeTruthy();
     expect(screen.getByText(/dead battery, no signal/)).toBeTruthy();
     expect(screen.getByText("I'm on it")).toBeTruthy();
+    // Cy has no emergency contacts, so offering to text them would only produce an error.
+    expect(screen.queryByText('Text their emergency contacts')).toBeNull();
   });
 
   test('only the host sees "Remove"', async () => {

@@ -96,27 +96,6 @@ export default function Member() {
       {row.phone && <Button kind="secondary" title={`Text ${row.name}`} onPress={() => Linking.openURL(`sms:${row.phone}`)} />}
       {mapUrl && <Button kind="secondary" title={`Open last location (${ago(loc!.at)})`} onPress={() => Linking.openURL(mapUrl)} />}
 
-      {v.board.hostId === v.me && id !== v.me && row.status !== 'left' && (
-        <Button
-          kind="secondary"
-          title={`Remove ${row.name} from the huddle`}
-          busy={busy === 'remove'}
-          onPress={() =>
-            Alert.alert(`Remove ${row.name}?`, 'They stop seeing the group, and nothing shared from now on can be read by them.', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: () =>
-                  act('remove', async () => {
-                    await h.remove(id);
-                    router.back();
-                  }),
-              },
-            ])
-          }
-        />
-      )}
       {row.needsAttention && id !== v.me && (
         <>
           {!iResponding && <Button title="I'm on it" onPress={() => act('ack', () => h.ack(id))} busy={busy === 'ack'} />}
@@ -126,7 +105,7 @@ export default function Member() {
               {name(r.memberId)} is responding (since {clock(r.at)}).
             </P>
           ))}
-          {row.status !== 'escalated' && (
+          {row.hasContacts && !row.contactsAlerted && (
             <Button
               kind="secondary"
               title="Text their emergency contacts"
@@ -149,6 +128,27 @@ export default function Member() {
             })}
           />
         </>
+      )}
+      {v.board.hostId === v.me && id !== v.me && row.status !== 'left' && (
+        <Button
+          kind="secondary"
+          title={`Remove ${row.name} from the huddle`}
+          busy={busy === 'remove'}
+          onPress={() =>
+            Alert.alert(`Remove ${row.name}?`, 'They stop seeing the group, and nothing shared from now on can be read by them.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () =>
+                  act('remove', async () => {
+                    await h.remove(id);
+                    router.back();
+                  }),
+              },
+            ])
+          }
+        />
       )}
     </ScrollView>
   );
