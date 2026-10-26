@@ -75,6 +75,7 @@ export function createSession(opts: {
     name: opts.name.slice(0, 80),
     timeZone: validZone(opts.timeZone),
     proximityKey: opts.proximityKey,
+    hostId: opts.founder.id,
     e2e: opts.e2e === true,
     keyEpoch: opts.e2e ? 1 : 0,
     createdAt: opts.now,
@@ -325,14 +326,40 @@ export function updatePolicy(session: Session, memberId: string, policy: CheckIn
 
 export function leave(session: Session, memberId: string, now: Millis): Result {
   const s = open(session);
-  const m = active(s, memberId);
+  depart(s, active(s, memberId), now);
+  log(s, { at: now, kind: 'left', memberId });
+  return { session: s, effects: [{ kind: 'left', memberId }] };
+}
+
+/**
+ * The host removes someone (e.g. they shouldn't be there). Same as leaving: their
+ * locations are wiped, the group key rotates, and the server cuts their access.
+ */
+export function removeMember(session: Session, byId: string, targetId: string, now: Millis): Result {
+  const s = open(session);
+  active(s, byId);
+  const t = active(s, targetId);
+  if (hostOf(s) !== byId) throw new HuddleError('not-host', 'only the host can remove people');
+  if (byId === targetId) throw new HuddleError('self', 'use leave to leave');
+  depart(s, t, now);
+  log(s, { at: now, kind: 'removed', memberId: targetId, byId });
+  return { session: s, effects: [{ kind: 'left', memberId: targetId, removedBy: byId }] };
+}
+
+/** The current host: the stored one if still here, else the longest-standing member. */
+export function hostOf(s: Session): string | null {
+  const here = s.members.filter((m) => m.leftAt === null);
+  if (s.hostId && here.some((m) => m.id === s.hostId)) return s.hostId;
+  return here.sort((a, b) => a.joinedAt - b.joinedAt)[0]?.id ?? null;
+}
+
+function depart(s: Session, m: Member, now: Millis) {
   m.leftAt = now;
   wipeLocations(m);
   m.liveLocationSince = null;
   // New epoch: the person who left can't read anything shared from now on.
   if (s.e2e) s.keyEpoch = (s.keyEpoch ?? 1) + 1;
-  log(s, { at: now, kind: 'left', memberId });
-  return { session: s, effects: [{ kind: 'left', memberId }] };
+  s.hostId = hostOf(s) ?? undefined;
 }
 
 /**

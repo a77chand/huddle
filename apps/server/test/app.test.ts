@@ -419,6 +419,16 @@ test('three phones run the app\'s key-sync logic: claim, invite link, auto-share
   await h.app.close();
 });
 
+test('host removes a member: they are cut off and the group is told', async () => {
+  const t = await setup();
+  assert.equal((await t.call('POST', `/v1/members/${t.cyId}/remove`, t.bea)).json.error, 'not-host');
+  const r = await t.call('POST', `/v1/members/${t.cyId}/remove`, t.ana);
+  assert.equal(r.json.board.rows.find((x: any) => x.id === t.cyId).status, 'left');
+  assert.equal((await t.call('GET', '/v1/session', t.cy)).json.error, 'left', 'removed member is locked out');
+  await t.idle();
+  assert.ok(t.pushes.some((p) => p.msg.title === 'Ana removed Cy'));
+});
+
 test('auth, validation and join-code errors', async () => {
   const t = await setup();
   assert.equal((await t.call('GET', '/v1/session')).status, 401);

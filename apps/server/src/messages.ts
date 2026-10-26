@@ -90,7 +90,12 @@ export function render(session: Session, effects: Effect[], now: Millis): Outbou
           });
         break;
       case 'left':
-        push(others(m.id), `${m.name} left the session`, 'They are no longer sharing check-ins.', 'info');
+        push(
+          others(m.id),
+          e.removedBy ? `${name(e.removedBy)} removed ${m.name}` : `${m.name} left the session`,
+          'They can no longer see the group or anything shared from now on.',
+          'info',
+        );
         break;
     }
   }

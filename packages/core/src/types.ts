@@ -118,6 +118,7 @@ export type TimelineKind =
   | 'resolved'
   | 'battery-low'
   | 'left'
+  | 'removed'
   | 'ended';
 
 export interface TimelineEntry {
@@ -143,6 +144,8 @@ export interface Session {
   e2e?: boolean;
   /** Current group-key epoch; advances when someone leaves so they can't read new data. */
   keyEpoch?: number;
+  /** Who can remove members: the creator, then the longest-standing member if they leave. */
+  hostId?: string;
   createdAt: Millis;
   endsAt: Millis;
   endedAt: Millis | null;
@@ -163,7 +166,7 @@ export type Effect =
   | { kind: 'responder'; memberId: string; responderId: string }
   | { kind: 'card'; memberId: string }
   | { kind: 'all-clear'; memberId: string; byId: string; notifyContacts: boolean }
-  | { kind: 'left'; memberId: string };
+  | { kind: 'left'; memberId: string; removedBy?: string };
 
 export interface Result {
   session: Session;

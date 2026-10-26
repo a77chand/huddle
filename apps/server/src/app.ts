@@ -341,6 +341,11 @@ export async function buildApp(opts: AppOptions) {
     return mutate(req, (s, me, t) => core.reportBattery(s, me, num(b.level, 'level'), t, locations(b, t)));
   });
 
+  app.post('/v1/members/:id/remove', async (req) => {
+    const target = (req.params as { id: string }).id;
+    return mutate(req, (s, me, t) => core.removeMember(s, me, target, t));
+  });
+
   for (const action of ['ack', 'escalate', 'resolve'] as const) {
     app.post(`/v1/members/:id/${action}`, async (req) => {
       const target = (req.params as { id: string }).id;

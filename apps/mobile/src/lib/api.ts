@@ -86,6 +86,7 @@ export function client(serverUrl: string, token: string | null) {
     proximity: (sightings: { memberId: string; at: number }[]) => call<View>('POST', '/v1/proximity', { sightings }),
     battery: (level: number, loc: LocationPayload = {}) => call<View>('POST', '/v1/battery', { level, ...loc }),
     ack: (id: string) => call<View>('POST', `/v1/members/${id}/ack`),
+    remove: (id: string) => call<View>('POST', `/v1/members/${id}/remove`),
     escalate: (id: string) => call<View>('POST', `/v1/members/${id}/escalate`),
     resolve: (id: string) => call<View>('POST', `/v1/members/${id}/resolve`),
     policy: (policy: CheckInPolicy) => call<View>('PUT', '/v1/policy', { policy }),

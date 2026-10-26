@@ -2,7 +2,7 @@ import * as Battery from 'expo-battery';
 import * as Haptics from 'expo-haptics';
 import * as SMS from 'expo-sms';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import type { BoardRow, CheckInPolicy } from '@huddle/core';
 import { ApiError, client, OfflineError, type View } from './api';
 import { batteryLevel, cancelPrompts, currentFix, pushToken, requestNotificationPermission, schedulePrompts, setupNotifications } from './device';
@@ -65,6 +65,8 @@ interface Huddle {
   ack(memberId: string): Promise<void>;
   escalate(memberId: string): Promise<void>;
   resolve(memberId: string): Promise<void>;
+  /** Host only: remove someone; the group key rotates so they can't read anything new. */
+  remove(memberId: string): Promise<void>;
   updatePolicy(p: CheckInPolicy): Promise<void>;
   leave(): Promise<void>;
   refresh(): Promise<void>;
@@ -121,7 +123,10 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
         setView(v);
         return v;
       } catch (e) {
-        if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.code === 'ended' || e.code === 'left')) await forget();
+        if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.code === 'ended' || e.code === 'left')) {
+          if (e.code === 'left') Alert.alert('You’re no longer in this huddle', 'You left, or the host removed you.');
+          await forget();
+        }
         throw e;
       }
     },
@@ -417,6 +422,9 @@ export function HuddleProvider({ children }: { children: ReactNode }) {
     },
     async resolve(id) {
       await run(() => api.resolve(id));
+    },
+    async remove(id) {
+      await run(() => api.remove(id));
     },
     async updatePolicy(p) {
       if (profile) await value.saveProfile({ ...profile, policy: p });

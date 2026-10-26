@@ -1,4 +1,4 @@
-import { lastNear, needsAttention } from './engine.ts';
+import { hostOf, lastNear, needsAttention } from './engine.ts';
 import type { AlertCard, GeoFix, Member, Millis, Responder, Sealed, Session } from './types.ts';
 
 const MIN = 60_000;
@@ -46,6 +46,8 @@ export interface Board {
   endsAt: Millis;
   ended: boolean;
   e2e: boolean;
+  /** Can remove members. */
+  hostId: string | null;
   rows: BoardRow[];
   counts: { present: number; accountedFor: number; needAttention: number; beingHelped: number };
 }
@@ -61,6 +63,7 @@ export function board(session: Session, now: Millis): Board {
     endsAt: session.endsAt,
     ended: session.endedAt !== null,
     e2e: session.e2e === true,
+    hostId: hostOf(session),
     rows,
     counts: {
       present: present.length,

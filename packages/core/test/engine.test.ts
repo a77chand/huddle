@@ -15,6 +15,7 @@ import {
   leave,
   nextWakeAt,
   reportBattery,
+  removeMember,
   reportSightings,
   resolve,
   shareLocation,
@@ -249,4 +250,19 @@ test('live location: updates position without checking in; off clears the flag; 
   s = leave(shareLocation(s, 'cy', { live: true }, T0 + 33 * MIN).session, 'cy', T0 + 34 * MIN).session;
   assert.equal(s.members[2]!.liveLocationSince, null);
   assert.equal(s.members[2]!.lastLocation, null);
+});
+
+test('the host can remove someone; removal rotates the key; hosting passes on if the host leaves', () => {
+  let s: Session = { ...concert(), e2e: true, keyEpoch: 1 };
+  assert.equal(board(s, T0).hostId, 'ana');
+  assert.throws(() => removeMember(s, 'bea', 'cy', T0), /only the host/);
+  assert.throws(() => removeMember(s, 'ana', 'ana', T0), /use leave/);
+  const r = removeMember(s, 'ana', 'cy', T0 + MIN);
+  assert.deepEqual(r.effects, [{ kind: 'left', memberId: 'cy', removedBy: 'ana' }]);
+  s = r.session;
+  assert.equal(s.members[2]!.leftAt, T0 + MIN);
+  assert.equal(s.keyEpoch, 2, 'removal rotates the group key');
+  assert.equal(s.timeline.at(-1)!.kind, 'removed');
+  s = leave(s, 'ana', T0 + 2 * MIN).session;
+  assert.equal(board(s, T0 + 2 * MIN).hostId, 'bea', 'the longest-standing member becomes host');
 });
